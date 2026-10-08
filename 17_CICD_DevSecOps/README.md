@@ -549,7 +549,9 @@ yamllint: no errors or warnings
 
 ## Pipeline run on GitHub
 
-<!-- PIPELINE_RUN_PLACEHOLDER -->
+![session 17 pipeline run on GitHub](screenshots/s17-08-github-pipeline-run.png)
+
+Run #1 of `session17-devsecops.yml`, triggered by pushing commit `389e7f1` to `main`. All eight jobs are green in 3m 33s, producing 5 artifacts (the scan reports). The graph shows the four checks that run first — `Build & unit test`, `SAST (Semgrep)`, `SCA (npm audit + Trivy fs)` and `Secret scan (gitleaks)` — feeding `Image build, scan & gate` and then `Security gate`, so nothing reaches GHCR or the cluster until every control has passed.
 
 ---
 

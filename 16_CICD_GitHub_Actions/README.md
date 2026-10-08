@@ -352,7 +352,9 @@ So the workflow uses `checkout@v7`, `setup-node@v7`, `upload-artifact@v7`, `logi
 
 ## Pipeline run on GitHub
 
-<!-- PIPELINE_RUN_PLACEHOLDER -->
+![session 16 pipeline run on GitHub](screenshots/s16-05-github-pipeline-run.png)
+
+Run #1 of `session16-cicd.yml`, triggered by pushing commit `389e7f1` to `main`. All five jobs are green — `Test (Node 22)`, `Test (Node 24)`, `Build artifact`, `Build & push image (GHCR)` and `Deploy to kind (ephemeral)` — in a total of 2m 33s, with 2 artifacts retained. The graph shows the two matrix test jobs finishing before `Build artifact`, which then gates the image build and the deploy.
 
 ---
 
