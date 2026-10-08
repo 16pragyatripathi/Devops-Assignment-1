@@ -1,0 +1,59 @@
+# Deployment + Service for the Session 16 demo app.
+# IMAGE_PLACEHOLDER is replaced by the CD job with the exact image that was
+# just pushed (ghcr.io/<owner>/pragya-cicd-demo:<commit-sha>).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pragya-cicd-demo
+  labels:
+    app: pragya-cicd-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pragya-cicd-demo
+  template:
+    metadata:
+      labels:
+        app: pragya-cicd-demo
+    spec:
+      containers:
+        - name: app
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: APP_VERSION
+              value: VERSION_PLACEHOLDER
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 3000
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pragya-cicd-demo
+spec:
+  selector:
+    app: pragya-cicd-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000

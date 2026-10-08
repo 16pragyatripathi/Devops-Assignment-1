@@ -1,0 +1,19 @@
+{
+  "name": "pragya-cicd-demo",
+  "version": "1.0.0",
+  "description": "Session 16 CI/CD demo API - Pragya Tripathi (24BCS10032)",
+  "main": "src/server.js",
+  "files": [
+    "src/"
+  ],
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "author": "Pragya Tripathi <pragya.24bcs10032@sst.scaler.com>",
+  "license": "MIT",
+  "private": true
+}
