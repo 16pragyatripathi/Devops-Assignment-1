@@ -1,0 +1,12 @@
+# Same wrong tag as broken-pod.yaml, but pulled through Google's Docker Hub
+# mirror. On my kind node Docker Hub's auth server (auth.docker.io) timed out,
+# so the original pod hung in ContainerCreating; the mirror answers quickly
+# with "not found", which shows the classic ErrImagePull -> ImagePullBackOff.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: image-demo-mirror
+spec:
+  containers:
+    - name: app
+      image: mirror.gcr.io/library/nginx:this-image-does-not-exist

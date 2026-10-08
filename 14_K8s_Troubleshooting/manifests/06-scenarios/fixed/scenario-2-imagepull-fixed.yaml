@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-2-imagepull-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: imagepull
+spec:
+  containers:
+    - name: web-app
+      # FIX: "yatri-api-service" is not a repository on Docker Hub. Use an
+      # image that exists (in real life: the correct registry/repo:tag of the app).
+      image: nginx:1.27

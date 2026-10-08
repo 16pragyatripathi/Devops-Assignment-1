@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-3-pending-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: pending
+spec:
+  containers:
+    - name: hungry-app
+      image: nginx:1.27-alpine
+      resources:
+        requests:
+          cpu: "100m"        # FIX: was "500" (cores) - node has 15
+          memory: "64Mi"     # FIX: was "1000Gi" - node has ~8Gi

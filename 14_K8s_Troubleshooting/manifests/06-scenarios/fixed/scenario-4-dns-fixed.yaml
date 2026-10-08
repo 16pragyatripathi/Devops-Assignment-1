@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-4-dns-failure-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: dns-failure
+spec:
+  containers:
+    - name: client
+      image: curlimages/curl:8.5.0
+      command: ["sh", "-c"]
+      args:
+        - |
+          echo "Attempting connection to internal service...";
+          # FIX: use a Service that really exists: <service>.<namespace>.svc.cluster.local
+          # and do not hide the error with -s / || true
+          curl -sS -o /dev/null -w "HTTP %{http_code}\n" --connect-timeout 3 http://web-service.s14-troubleshoot.svc.cluster.local:80
+          echo "Process sleeping...";
+          sleep 3600

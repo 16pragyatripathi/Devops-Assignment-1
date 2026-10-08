@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: fail-5-oomkilled-pod
+  labels:
+    tier: triage-gauntlet
+    scenario: oomkilled
+spec:
+  containers:
+    - name: memory-leaker
+      image: python:3.11-alpine
+      command:
+        - "python3"
+        - "-c"
+        - |
+          import time
+          print("Allocating memory rapidly...", flush=True)
+          chunks = []
+          for i in range(100):
+              chunks.append(b"x" * (10 * 1024 * 1024))
+          print("Allocated about 1000 MiB without being killed", flush=True)
+          time.sleep(3600)
+      resources:
+        requests:
+          memory: "1200Mi"
+        limits:
+          memory: "1200Mi"   # FIX: limit must be larger than what the program really uses (was 20Mi)

@@ -1,0 +1,12 @@
+# Reads env vars from a ConfigMap that was never created.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: config-demo
+spec:
+  containers:
+    - name: app
+      image: nginx:1.27
+      envFrom:
+        - configMapRef:
+            name: app-settings
