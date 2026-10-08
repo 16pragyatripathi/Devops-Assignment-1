@@ -1,0 +1,41 @@
+# Desired state of the demo web app. Argo CD applies this file from GitHub;
+# I never run kubectl apply on it myself.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pragya-web
+  labels:
+    app: pragya-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pragya-web
+  template:
+    metadata:
+      labels:
+        app: pragya-web
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9898"
+        prometheus.io/path: /metrics
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/stefanprodan/podinfo:6.15.0
+          command: ["./podinfo", "--port=9898", "--level=info"]
+          env:
+            - name: PODINFO_UI_MESSAGE
+              value: "Pragya Tripathi - Session 20 GitOps demo (v1)"
+            - name: PODINFO_UI_COLOR
+              value: "#34577c"
+          ports:
+            - name: http
+              containerPort: 9898
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 96Mi}

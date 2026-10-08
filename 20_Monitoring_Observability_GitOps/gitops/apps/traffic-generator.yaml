@@ -1,0 +1,37 @@
+# Sends a steady trickle of requests to pragya-web so that Prometheus and
+# Grafana have real request-rate and latency data to show.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pragya-traffic
+  labels:
+    app: pragya-traffic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pragya-traffic
+  template:
+    metadata:
+      labels:
+        app: pragya-traffic
+    spec:
+      containers:
+        - name: curl-loop
+          image: busybox:1.36
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "traffic generator started"
+              i=0
+              while true; do
+                wget -qO- http://pragya-web/ >/dev/null 2>&1
+                wget -qO- http://pragya-web/api/info >/dev/null 2>&1
+                i=$((i+1))
+                # every 10th round call an endpoint that is deliberately slow
+                [ $((i % 10)) -eq 0 ] && wget -qO- http://pragya-web/delay/1 >/dev/null 2>&1
+                sleep 0.5
+              done
+          resources:
+            requests: {cpu: 5m, memory: 8Mi}
+            limits: {cpu: 50m, memory: 32Mi}

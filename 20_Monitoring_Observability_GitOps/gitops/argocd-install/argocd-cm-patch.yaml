@@ -1,0 +1,5 @@
+# Applied after the upstream install.yaml.
+# Default polling is every 120s (+ jitter). 60s makes the demo quicker;
+# a real setup would use a GitHub webhook instead of shorter polling.
+data:
+  timeout.reconciliation: 60s

@@ -1,0 +1,179 @@
+# Prometheus configuration (scrape jobs) and alerting rules, stored as ConfigMaps.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pragya-prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: devops-hw
+
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ["pragya-alertmanager.monitoring.svc:9093"]
+
+    scrape_configs:
+      # 1. Prometheus scraping itself (same as the class demo)
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # 2. Alertmanager
+      - job_name: alertmanager
+        static_configs:
+          - targets: ["pragya-alertmanager.monitoring.svc:9093"]
+
+      # 3. kube-state-metrics: state of Kubernetes objects (pods, deployments, ...)
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: ["pragya-kube-state-metrics.monitoring.svc:8080"]
+
+      # 4. Kubelet on every node, reached through the API server proxy
+      - job_name: kubernetes-nodes
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics
+
+      # 5. cAdvisor on every node: CPU / memory of every container
+      - job_name: kubernetes-cadvisor
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
+
+      # 6. Any Pod that opts in with annotations:
+      #      prometheus.io/scrape: "true"
+      #      prometheus.io/port:   "<port>"
+      #      prometheus.io/path:   "/metrics"   (optional)
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_phase]
+            action: drop
+            regex: (Pending|Succeeded|Failed)
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pragya-prometheus-rules
+  namespace: monitoring
+data:
+  s20-alerts.yml: |
+    groups:
+      - name: pragya-s20-platform
+        rules:
+          # A scrape target has been unreachable for 1 minute
+          - alert: TargetDown
+            expr: up == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Target {{ $labels.job }} / {{ $labels.instance }} is down"
+
+          # A Pod has not been Ready for 2 minutes (needs kube-state-metrics)
+          - alert: PodNotReady
+            expr: sum by (namespace, pod) (kube_pod_status_ready{condition="false"}) == 1
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is not Ready"
+
+          # A container keeps restarting
+          - alert: ContainerRestarting
+            expr: increase(kube_pod_container_status_restarts_total[10m]) > 3
+            labels:
+              severity: warning
+            annotations:
+              summary: "{{ $labels.namespace }}/{{ $labels.pod }} restarted {{ $value | printf \"%.0f\" }} times in 10m"
+
+          # A Deployment does not have the number of replicas it asked for
+          - alert: DeploymentReplicasMismatch
+            expr: kube_deployment_spec_replicas != kube_deployment_status_replicas_available
+            for: 3m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas"
+
+          # A container uses more than 90% of its memory limit (OOMKill is near)
+          - alert: ContainerMemoryNearLimit
+            expr: |
+              max by (namespace, pod, container) (container_memory_working_set_bytes{container!=""})
+                /
+              max by (namespace, pod, container) (kube_pod_container_resource_limits{resource="memory"}) > 0.9
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "{{ $labels.namespace }}/{{ $labels.pod }} is at {{ $value | humanizePercentage }} of its memory limit"
+
+      - name: pragya-s20-app
+        rules:
+          # More than 5% of requests to the demo web app return 5xx
+          - alert: WebHighErrorRate
+            expr: |
+              sum by (namespace) (rate(http_request_duration_seconds_count{namespace="s20-demo", status=~"5.."}[2m]))
+                /
+              sum by (namespace) (rate(http_request_duration_seconds_count{namespace="s20-demo"}[2m])) > 0.05
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "{{ $value | humanizePercentage }} of requests in {{ $labels.namespace }} are failing"
+
+          # 95th percentile latency above 500 ms
+          - alert: WebHighLatencyP95
+            expr: |
+              histogram_quantile(0.95,
+                sum by (le, namespace) (rate(http_request_duration_seconds_bucket{namespace="s20-demo"}[5m]))) > 0.5
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "p95 latency in {{ $labels.namespace }} is {{ $value | humanizeDuration }}"

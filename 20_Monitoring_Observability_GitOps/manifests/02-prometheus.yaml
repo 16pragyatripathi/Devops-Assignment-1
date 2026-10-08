@@ -1,0 +1,82 @@
+# Prometheus server (single replica, data in emptyDir - fine for a lab)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pragya-prometheus
+  namespace: monitoring
+  labels:
+    app: pragya-prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pragya-prometheus
+  template:
+    metadata:
+      labels:
+        app: pragya-prometheus
+    spec:
+      serviceAccountName: pragya-prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.5.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=1d
+            - --web.enable-lifecycle          # allows POST /-/reload after a ConfigMap change
+          ports:
+            - name: http
+              containerPort: 9090
+          readinessProbe:
+            httpGet: {path: /-/ready, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /-/healthy, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 768Mi}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus/prometheus.yml
+              subPath: prometheus.yml
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: pragya-prometheus-config
+        - name: rules
+          projected:
+            sources:
+              - configMap:
+                  name: pragya-prometheus-rules
+              # Session 21 adds its own rule file in this ConfigMap (optional, may not exist yet)
+              - configMap:
+                  name: pragya-s21-prometheus-rules
+                  optional: true
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pragya-prometheus
+  namespace: monitoring
+  labels:
+    app: pragya-prometheus
+spec:
+  selector:
+    app: pragya-prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http

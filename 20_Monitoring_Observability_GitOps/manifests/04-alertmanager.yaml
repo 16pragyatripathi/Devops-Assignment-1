@@ -1,0 +1,139 @@
+# Alertmanager receives firing alerts from Prometheus, groups them and sends
+# notifications. Instead of Slack/e-mail I send them to a tiny webhook Pod that
+# just prints what it receives, so the whole path can be seen with kubectl logs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pragya-alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    route:
+      receiver: pragya-webhook
+      group_by: [alertname, namespace]
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 1h
+    receivers:
+      - name: pragya-webhook
+        webhook_configs:
+          - url: http://pragya-alert-webhook.monitoring.svc:8080/alert
+            send_resolved: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pragya-alertmanager
+  namespace: monitoring
+  labels:
+    app: pragya-alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pragya-alertmanager
+  template:
+    metadata:
+      labels:
+        app: pragya-alertmanager
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.34.1
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --storage.path=/alertmanager
+          ports:
+            - name: http
+              containerPort: 9093
+          readinessProbe:
+            httpGet: {path: /-/ready, port: http}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 128Mi}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alertmanager
+            - name: data
+              mountPath: /alertmanager
+      volumes:
+        - name: config
+          configMap:
+            name: pragya-alertmanager-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pragya-alertmanager
+  namespace: monitoring
+spec:
+  selector:
+    app: pragya-alertmanager
+  ports:
+    - name: http
+      port: 9093
+      targetPort: http
+---
+# Webhook receiver: prints one line per alert it is notified about
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pragya-alert-webhook
+  namespace: monitoring
+  labels:
+    app: pragya-alert-webhook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pragya-alert-webhook
+  template:
+    metadata:
+      labels:
+        app: pragya-alert-webhook
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: webhook
+          image: python:3.12-slim
+          command: ["python", "-u", "-c"]
+          args:
+            - |
+              import json
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+              class H(BaseHTTPRequestHandler):
+                  def do_POST(self):
+                      body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                      for a in body["alerts"]:
+                          l = a["labels"]
+                          print(f'[{a["status"].upper():8}] {l.get("alertname")} severity={l.get("severity")} '
+                                f'ns={l.get("namespace", "-")} :: {a["annotations"].get("summary", "")}')
+                      self.send_response(200); self.end_headers()
+                  def log_message(self, *args):
+                      pass
+              print("pragya alert webhook listening on :8080")
+              HTTPServer(("", 8080), H).serve_forever()
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: {cpu: 5m, memory: 24Mi}
+            limits: {cpu: 50m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pragya-alert-webhook
+  namespace: monitoring
+spec:
+  selector:
+    app: pragya-alert-webhook
+  ports:
+    - port: 8080
+      targetPort: 8080

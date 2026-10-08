@@ -1,0 +1,118 @@
+# Grafana with the Prometheus datasource and a dashboard provisioned as code.
+# The admin login is NOT in this file: it comes from the Secret
+# "pragya-grafana-admin", which I create with kubectl (see README).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pragya-grafana-datasources
+  namespace: monitoring
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: pragya-prom
+        type: prometheus
+        access: proxy
+        url: http://pragya-prometheus.monitoring.svc:9090
+        isDefault: true
+        jsonData:
+          timeInterval: 15s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pragya-grafana-dashboard-provider
+  namespace: monitoring
+data:
+  provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: pragya-dashboards
+        folder: Pragya
+        type: file
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pragya-grafana
+  namespace: monitoring
+  labels:
+    app: pragya-grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pragya-grafana
+  template:
+    metadata:
+      labels:
+        app: pragya-grafana
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:12.1.1
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom: {secretKeyRef: {name: pragya-grafana-admin, key: admin-user}}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom: {secretKeyRef: {name: pragya-grafana-admin, key: admin-password}}
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+            - name: GF_NEWS_NEWS_FEED_ENABLED
+              value: "false"
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: /var/lib/grafana/dashboards/s20/pragya-s20-overview.json
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 384Mi}
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards-s20
+              mountPath: /var/lib/grafana/dashboards/s20
+            - name: dashboards-s21
+              mountPath: /var/lib/grafana/dashboards/s21
+            - name: data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: datasources
+          configMap: {name: pragya-grafana-datasources}
+        - name: dashboard-provider
+          configMap: {name: pragya-grafana-dashboard-provider}
+        - name: dashboards-s20
+          configMap: {name: pragya-grafana-dashboard-s20}
+        # Session 21 ships its own dashboard in this ConfigMap (optional)
+        - name: dashboards-s21
+          configMap: {name: pragya-grafana-dashboard-s21, optional: true}
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pragya-grafana
+  namespace: monitoring
+spec:
+  selector:
+    app: pragya-grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

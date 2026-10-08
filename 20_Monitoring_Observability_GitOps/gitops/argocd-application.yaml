@@ -1,0 +1,23 @@
+# Applied ONCE by hand (kubectl apply -f gitops/argocd-application.yaml).
+# It lives outside gitops/apps on purpose: it tells Argo CD where to look,
+# it is not one of the workloads Argo CD should deploy from that path.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pragya-s20-web
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/16pragyatripathi/Devops-Assignment-1.git
+    targetRevision: main
+    path: 20_Monitoring_Observability_GitOps/gitops/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: s20-demo
+  syncPolicy:
+    automated:
+      prune: true      # delete objects whose files are removed from Git
+      selfHeal: true   # undo manual changes made directly in the cluster
+    syncOptions:
+      - CreateNamespace=true
