@@ -1,0 +1,5 @@
+aws_region        = "ap-south-1"
+bucket_name       = "pragya-24bcs10032-tf-demo"
+environment       = "dev"
+project_name      = "pragya-terraform-training"
+enable_versioning = true
