@@ -1,0 +1,18 @@
+# Production overrides: more replicas, pinned newer image, bigger limits.
+replicaCount: 3
+
+image:
+  tag: "1.28-alpine"
+
+app:
+  environment: "production"
+  message: "pragya-webapp running in PROD"
+  colour: "#b91c1c"
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

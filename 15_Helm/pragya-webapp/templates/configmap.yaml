@@ -1,0 +1,46 @@
+# 1) plain key/values -> injected into the container as env vars
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pragya-webapp.fullname" . }}-config
+  labels:
+    {{- include "pragya-webapp.labels" . | nindent 4 }}
+data:
+  APP_OWNER: {{ .Values.app.owner | quote }}
+  APP_ENVIRONMENT: {{ .Values.app.environment | quote }}
+  APP_MESSAGE: {{ .Values.app.message | quote }}
+---
+# 2) the HTML page nginx serves (mounted over /usr/share/nginx/html)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pragya-webapp.fullname" . }}-page
+  labels:
+    {{- include "pragya-webapp.labels" . | nindent 4 }}
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head><meta charset="utf-8"><title>{{ .Release.Name }} - {{ .Chart.Name }}</title></head>
+    <body style="font-family: -apple-system, Helvetica, sans-serif; max-width: 720px; margin: 50px auto;">
+      <h1 style="color: {{ .Values.app.colour }}">{{ .Values.app.message }}</h1>
+      {{- if eq .Values.app.environment "production" }}
+      <p style="background:#fee2e2; padding:8px;"><b>PRODUCTION</b> - handle with care</p>
+      {{- end }}
+      <p>Deployed by <b>{{ .Values.app.owner }}</b> ({{ .Values.app.rollNo }})</p>
+      <table border="1" cellpadding="6" style="border-collapse: collapse;">
+        <tr><td>Release</td><td>{{ .Release.Name }} (namespace {{ .Release.Namespace }})</td></tr>
+        <tr><td>Revision</td><td>{{ .Release.Revision }}</td></tr>
+        <tr><td>Chart</td><td>{{ include "pragya-webapp.chart" . }}</td></tr>
+        <tr><td>Image</td><td>{{ include "pragya-webapp.image" . }}</td></tr>
+        <tr><td>Replicas</td><td>{{ .Values.replicaCount }}</td></tr>
+        <tr><td>Environment</td><td>{{ .Values.app.environment | upper }}</td></tr>
+      </table>
+      <h3>What this chart demonstrates</h3>
+      <ul>
+      {{- range .Values.app.features }}
+        <li>{{ . }}</li>
+      {{- end }}
+      </ul>
+    </body>
+    </html>

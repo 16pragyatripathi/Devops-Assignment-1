@@ -1,0 +1,48 @@
+# Default values for pragya-webapp.
+# Override per environment with -f values-dev.yaml / -f values-prod.yaml,
+# or one-off with --set key=value (highest priority).
+
+replicaCount: 2
+
+image:
+  repository: nginx
+  # empty tag -> the template falls back to .Chart.AppVersion ("1.27-alpine")
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Everything under "app" ends up in ConfigMaps (env vars + the HTML page).
+app:
+  owner: "Pragya Tripathi"
+  rollNo: "24BCS10032"
+  environment: "default"
+  message: "Hello from Helm - first install"
+  colour: "#0f766e"
+  features:
+    - "Chart.yaml + values.yaml"
+    - "templates with _helpers.tpl"
+    - "install / upgrade / rollback"
+
+service:
+  type: ClusterIP
+  port: 80
+
+serviceAccount:
+  create: true
+  name: ""
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  periodSeconds: 3
+
+nameOverride: ""
+fullnameOverride: ""

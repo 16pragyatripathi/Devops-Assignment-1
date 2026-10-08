@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pragya-webapp.fullname" . }}
+  labels:
+    {{- include "pragya-webapp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "pragya-webapp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # hash of the ConfigMaps: if the message/page changes, this changes,
+        # so the pods are rolled automatically on helm upgrade
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "pragya-webapp.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "pragya-webapp.serviceAccountName" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "pragya-webapp.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "pragya-webapp.fullname" . }}-config
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: page
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+      volumes:
+        - name: page
+          configMap:
+            name: {{ include "pragya-webapp.fullname" . }}-page

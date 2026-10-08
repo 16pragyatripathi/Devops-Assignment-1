@@ -1,0 +1,15 @@
+# Development overrides: one cheap replica.
+replicaCount: 1
+
+app:
+  environment: "development"
+  message: "pragya-webapp running in DEV"
+  colour: "#2563eb"
+
+resources:
+  requests:
+    cpu: 5m
+    memory: 8Mi
+  limits:
+    cpu: 50m
+    memory: 32Mi

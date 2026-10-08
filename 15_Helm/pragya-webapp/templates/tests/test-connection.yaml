@@ -1,0 +1,21 @@
+# Runs only on "helm test": fetches the page through the Service and
+# fails unless the configured message is in it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "pragya-webapp.fullname" . }}-test-connection"
+  labels:
+    {{- include "pragya-webapp.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  restartPolicy: Never
+  containers:
+    - name: wget
+      image: busybox:1.36
+      command: ["sh", "-c"]
+      args:
+        - >-
+          wget -qO- http://{{ include "pragya-webapp.fullname" . }}:{{ .Values.service.port }}/ |
+          grep -o {{ .Values.app.message | squote }}

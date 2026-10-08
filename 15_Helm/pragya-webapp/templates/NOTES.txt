@@ -1,0 +1,13 @@
+{{ .Chart.Name }} is installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}" (revision {{ .Release.Revision }}).
+
+  Message    : {{ .Values.app.message }}
+  Image      : {{ include "pragya-webapp.image" . }}
+  Replicas   : {{ .Values.replicaCount }}
+  Environment: {{ .Values.app.environment }}
+
+Open it locally:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "pragya-webapp.fullname" . }} 3215:{{ .Values.service.port }}
+  curl http://localhost:3215
+
+Run the built-in test:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

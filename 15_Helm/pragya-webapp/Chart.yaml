@@ -1,0 +1,17 @@
+apiVersion: v2
+name: pragya-webapp
+description: Small nginx web page for the Session 15 Helm homework (Pragya Tripathi, 24BCS10032)
+type: application
+
+# version    = version of THIS chart (bump it whenever templates/values change)
+# appVersion = version of the app inside (used as the image tag when image.tag is empty)
+version: 0.1.0
+appVersion: "1.27-alpine"
+
+keywords:
+  - nginx
+  - helm-homework
+home: https://github.com/16pragyatripathi/Devops-Assignment-1
+maintainers:
+  - name: Pragya Tripathi
+    email: pragya.24bcs10032@sst.scaler.com
