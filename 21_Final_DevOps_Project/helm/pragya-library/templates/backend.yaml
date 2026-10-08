@@ -35,6 +35,11 @@ spec:
         - name: wait-for-db
           image: {{ .Values.postgres.image }}
           command: ["sh", "-c", "until pg_isready -h {{ .Values.name }}-postgres -p 5432; do echo waiting for database; sleep 2; done"]
+          env:
+            # Without a user pg_isready answers "no attempt": uid 10001 has no
+            # /etc/passwd entry in the postgres image, so libpq has no default user.
+            - name: PGUSER
+              valueFrom: {secretKeyRef: {name: {{ .Values.postgres.existingSecret }}, key: username}}
           resources:
             requests: {cpu: 10m, memory: 16Mi}
             limits: {cpu: 100m, memory: 32Mi}
