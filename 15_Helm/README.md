@@ -851,6 +851,123 @@ Deleting my three namespaces cleaned up the rest. The (7 h) ages are because the
 
 ---
 
+## 12. Installing a public chart from a repository
+
+Everything above uses my own chart. Most of the time, though, you install charts someone else publishes. I used **podinfo** (a small demo web app maintained by the Flux project), whose chart repository is public and whose image comes from GHCR, so it does not depend on Docker Hub.
+
+### Add the repository, search it, read the chart before installing
+
+```text
+$ helm repo add podinfo https://stefanprodan.github.io/podinfo
+"podinfo" has been added to your repositories
+
+$ helm repo list
+NAME   	URL
+podinfo	https://stefanprodan.github.io/podinfo
+
+$ helm search repo podinfo --versions | head -5
+NAME           	CHART VERSION	APP VERSION	DESCRIPTION
+podinfo/podinfo	6.15.0       	6.15.0     	Podinfo Helm chart for Kubernetes
+podinfo/podinfo	6.14.1       	6.14.1     	Podinfo Helm chart for Kubernetes
+podinfo/podinfo	6.14.0       	6.14.0     	Podinfo Helm chart for Kubernetes
+podinfo/podinfo	6.13.0       	6.13.0     	Podinfo Helm chart for Kubernetes
+
+$ helm show chart podinfo/podinfo | grep -E '^(name|version|appVersion|description):'
+appVersion: 6.15.0
+description: Podinfo Helm chart for Kubernetes
+name: podinfo
+version: 6.15.0
+
+$ helm show values podinfo/podinfo | grep -nE '^replicaCount|^  repository: ghcr|^  tag: 6|^  message'
+3:replicaCount: 1
+10:  repository: ghcr.io/stefanprodan/podinfo
+11:  tag: 6.15.0
+19:  message: ""
+```
+
+![helm repo add, search and show](screenshots/s15-16-public-repo.png)
+
+`helm show values` is the important step: it tells me which knobs the chart author exposes. Here `replicaCount` and `ui.message` are the ones I want to change.
+
+### Install a pinned version with my own values
+
+```text
+$ helm install pub podinfo/podinfo --version 6.15.0 -n s15-public --set replicaCount=2 --set ui.message='Hello from Pragya Tripathi (24BCS10032)' --wait --timeout 3m | head -6
+NAME: pub
+LAST DEPLOYED: Thu Oct  8 20:14:46 2026
+NAMESPACE: s15-public
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+
+$ helm list -n s15-public
+NAME	NAMESPACE 	REVISION	UPDATED                             	STATUS  	CHART         	APP VERSION
+pub 	s15-public	1       	2026-10-08 20:14:46.826386 +0530 IST	deployed	podinfo-6.15.0	6.15.0
+
+$ kubectl get deploy,pods,svc -n s15-public -l app.kubernetes.io/name=pub-podinfo
+NAME                          READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/pub-podinfo   2/2     2            2           13s
+
+NAME                               READY   STATUS    RESTARTS   AGE
+pod/pub-podinfo-5db4bcdc77-5xt74   1/1     Running   0          13s
+pod/pub-podinfo-5db4bcdc77-zdsbf   1/1     Running   0          13s
+
+NAME                  TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)             AGE
+service/pub-podinfo   ClusterIP   10.96.226.223   <none>        9898/TCP,9999/TCP   13s
+
+$ kubectl exec -n s15-public client -- curl -s http://pub-podinfo:9898/ | grep -E 'hostname|version|message'
+  "hostname": "pub-podinfo-5db4bcdc77-zdsbf",
+  "version": "6.15.0",
+  "message": "Hello from Pragya Tripathi (24BCS10032)",
+```
+
+`client` is a long-running `curlimages/curl` pod I created in the namespace first. My first attempt used a one-shot `kubectl run --rm -i` pod instead; the container finished before `kubectl` could attach, so the output was lost (`warning: couldn't attach to pod/curl, falling back to streaming logs`). A pod that stays up and `kubectl exec` avoids that race.
+
+![public chart installed and checked from inside the cluster](screenshots/s15-17-public-install.png)
+
+The same page in the browser (`kubectl port-forward -n s15-public svc/pub-podinfo 3290:9898`):
+
+![podinfo UI showing my message](screenshots/s15-18-public-browser.png)
+
+### Upgrade, history and clean-up
+
+```text
+$ helm upgrade pub podinfo/podinfo --version 6.15.0 -n s15-public --reuse-values --set replicaCount=3 --set ui.color='#2e7d32' --wait | grep -E 'STATUS|REVISION'
+STATUS: deployed
+REVISION: 2
+
+$ helm get values pub -n s15-public
+USER-SUPPLIED VALUES:
+replicaCount: 3
+ui:
+  color: '#2e7d32'
+  message: Hello from Pragya Tripathi (24BCS10032)
+
+$ helm history pub -n s15-public
+REVISION	UPDATED                 	STATUS    	CHART         	APP VERSION	DESCRIPTION
+1       	Thu Oct  8 20:14:46 2026	superseded	podinfo-6.15.0	6.15.0     	Install complete
+2       	Thu Oct  8 20:15:22 2026	deployed  	podinfo-6.15.0	6.15.0     	Upgrade complete
+
+$ kubectl get deploy pub-podinfo -n s15-public
+NAME          READY   UP-TO-DATE   AVAILABLE   AGE
+pub-podinfo   3/3     3            3           60s
+
+$ helm uninstall pub -n s15-public --wait
+release "pub" uninstalled
+
+$ kubectl delete namespace s15-public --wait=true
+namespace "s15-public" deleted
+
+$ helm repo remove podinfo
+"podinfo" has been removed from your repositories
+```
+
+![upgrade, history and uninstall of the public chart](screenshots/s15-19-public-upgrade-uninstall.png)
+
+Thanks to `--reuse-values`, the message from the install survived the upgrade (see `helm get values`). This is the same lesson as with my own chart in section 7.
+
+---
+
 ## Problems I hit
 
 | Problem | Cause | Fix |
@@ -864,6 +981,9 @@ Deleting my three namespaces cleaned up the rest. The (7 h) ages are because the
 
 | Command | What it does |
 |---|---|
+| `helm repo add <name> <url>`, `helm repo list`, `helm repo remove <name>` | Manage chart repositories |
+| `helm search repo <keyword> [--versions]` | Find charts (and their versions) in added repos |
+| `helm show chart\|values <repo>/<chart>` | Read a chart's metadata / default values before installing |
 | `helm create <name>` | Generate a chart skeleton |
 | `helm lint <chart> [-f vals]` | Static checks of chart + templates (exit 1 on error) |
 | `helm template <rel> <chart> [-f] [--set] [--show-only file]` | Render YAML locally, no cluster |
@@ -889,3 +1009,4 @@ Deleting my three namespaces cleaned up the rest. The (7 h) ages are because the
 - A plain `helm upgrade` only means "Kubernetes accepted the objects". My broken upgrade was reported as `deployed` while a pod was in `ErrImagePull`. The rolling update protected availability, but the ConfigMap change still leaked into the old pods. `--wait` / `--rollback-on-failure` makes Helm actually check health and undo the change itself.
 - `helm rollback` writes a new revision from an old stored manifest; history is never rewritten, and it all lives in `sh.helm.release.v1.<release>.v<N>` Secrets in the release namespace.
 - `helm test` turns "it deployed" into "it works": my test fails unless the page served through the Service contains the configured message.
+- Public charts work exactly like my own: `helm repo add`, then read `helm show values` before installing, pin `--version`, and override only what I need. The chart author decides which settings are exposed as values.
