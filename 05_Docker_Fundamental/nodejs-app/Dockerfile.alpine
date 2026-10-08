@@ -1,0 +1,7 @@
+# Same app as Dockerfile, but on the much smaller Alpine variant of node:20.
+# Built with: docker build -f nodejs-app/Dockerfile.alpine -t hw-nodejs:alpine nodejs-app
+FROM node:20-alpine
+WORKDIR /app
+COPY server.js .
+EXPOSE 3000
+CMD ["node", "server.js"]
