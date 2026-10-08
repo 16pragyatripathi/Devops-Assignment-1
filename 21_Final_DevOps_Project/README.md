@@ -196,6 +196,12 @@ pipeline exit code: 0
 
 ![pipeline passes](screenshots/s21-06-ci-pipeline-passes.png)
 
+### Pipeline run on GitHub
+
+![Session 21 pipeline run on GitHub Actions](screenshots/s21-21-github-pipeline-run.png)
+
+[Run #1](https://github.com/16pragyatripathi/Devops-Assignment-1/actions/runs/37795336595) of `session21-library-ci.yml`, triggered by pushing commit `4bc4898` to `main`. All four jobs are green in 1m 59s: `Backend tests + frontend build` (21s) and `Secret scan (gitleaks)` (10s) ran in parallel, then `Build, Trivy gate & push to GHCR` (1m 18s) built both images, passed the Trivy gate and pushed `pragya-library-backend` / `pragya-library-frontend` tagged `4bc4898`, and `GitOps tag update (preview)` (9s) printed the Helm values change into the run summary.
+
 ## 5. Security scanning
 
 | Layer | Tool | Result on the final code |
