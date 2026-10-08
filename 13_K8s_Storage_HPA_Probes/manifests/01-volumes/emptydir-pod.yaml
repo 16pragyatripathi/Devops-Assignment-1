@@ -1,0 +1,25 @@
+# emptyDir: an empty folder created when the Pod starts.
+# Both containers mount the same volume, so the busybox "writer" can produce
+# the page that nginx serves. The folder lives as long as the Pod lives.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: emptydir-demo
+  labels:
+    app: emptydir-demo
+spec:
+  containers:
+    - name: web
+      image: nginx:1.27
+      volumeMounts:
+        - name: app-storage
+          mountPath: /usr/share/nginx/html
+    - name: writer
+      image: busybox:1.36
+      command: ["sh", "-c", "while true; do echo \"written by writer at $(date +%T)\" > /data/index.html; sleep 5; done"]
+      volumeMounts:
+        - name: app-storage
+          mountPath: /data
+  volumes:
+    - name: app-storage
+      emptyDir: {}

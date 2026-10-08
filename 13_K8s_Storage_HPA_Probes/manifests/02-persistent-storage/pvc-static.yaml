@@ -1,0 +1,16 @@
+# Fixed claim: storageClassName "" switches OFF dynamic provisioning for this
+# claim, so it can only bind to a pre-created PV that also has no class
+# (our s13-student-pv). Without this line kind's default "standard" class is
+# filled in automatically and a brand-new PV is provisioned instead.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: student-pvc
+spec:
+  storageClassName: ""
+  volumeName: s13-student-pv
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 500Mi

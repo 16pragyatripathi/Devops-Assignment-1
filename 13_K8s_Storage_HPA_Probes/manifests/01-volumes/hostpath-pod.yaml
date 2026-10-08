@@ -1,0 +1,18 @@
+# hostPath: mounts a folder of the NODE into the Pod.
+# The data stays on that node even after the Pod is deleted.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hostpath-demo
+spec:
+  containers:
+    - name: app
+      image: nginx:1.27
+      volumeMounts:
+        - name: host-storage
+          mountPath: /data
+  volumes:
+    - name: host-storage
+      hostPath:
+        path: /tmp/s13-hostpath-data
+        type: DirectoryOrCreate

@@ -1,0 +1,49 @@
+# StatefulSet + volumeClaimTemplates: every Pod gets ITS OWN PVC
+# (data-web-0, data-web-1, ...). When a Pod is re-created it keeps the same
+# name and is re-attached to the same PVC.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-headless
+spec:
+  clusterIP: None
+  selector:
+    app: sts-web
+  ports:
+    - port: 80
+      name: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  serviceName: web-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sts-web
+  template:
+    metadata:
+      labels:
+        app: sts-web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          # write the Pod's own name + start time into its own volume
+          command: ["sh", "-c", "echo \"$(hostname) started at $(date +%T)\" >> /usr/share/nginx/html/index.html; exec nginx -g 'daemon off;'"]
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/nginx/html
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 100Mi

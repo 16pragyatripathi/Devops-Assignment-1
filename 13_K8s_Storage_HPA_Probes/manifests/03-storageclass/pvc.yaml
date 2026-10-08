@@ -1,0 +1,13 @@
+# Dynamic provisioning: no PV is written by hand. The "standard" StorageClass
+# (kind's local-path provisioner) creates the PV when a Pod needs the claim.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dynamic-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 500Mi
