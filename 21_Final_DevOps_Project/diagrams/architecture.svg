@@ -46,7 +46,7 @@
   <text x="70" y="436" class="s">4. docker build backend + frontend</text>
   <text x="70" y="458" class="s">5. trivy gate: HIGH/CRITICAL fixable = fail</text>
   <text x="70" y="480" class="s">6. load images into kind</text>
-  <text x="70" y="505" class="xs">same stages as ci/pragya-library-ci.yml</text>
+  <text x="70" y="505" class="xs">same stages as session21-library-ci.yml</text>
 
   <rect class="box" x="55" y="555" width="280" height="76"/>
   <text x="70" y="580" class="t">Container images</text>

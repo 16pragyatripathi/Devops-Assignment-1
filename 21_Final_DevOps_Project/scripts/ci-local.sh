@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the same stages as ci/pragya-library-ci.yml on my laptop:
+# Runs the same stages as .github/workflows/session21-library-ci.yml on my laptop:
 #   test -> security -> build -> image scan gate -> load into kind
 # Usage: scripts/ci-local.sh <version>     e.g. scripts/ci-local.sh 1.0.0
 set -euo pipefail

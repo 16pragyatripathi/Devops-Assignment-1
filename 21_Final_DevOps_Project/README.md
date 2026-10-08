@@ -18,7 +18,7 @@ The class capstone ([session21-python](https://github.com/Nency-Ravaliya/devops-
 | Frontend | Vite build of plain HTML/JS/CSS, served by nginx (non-root) | - | [application/frontend](application/frontend) |
 | Tests | pytest, 11 tests, SQLite test database | 16 | [application/backend/tests](application/backend/tests) |
 | Containers | 2 Dockerfiles (frontend multi-stage), Docker Compose for the full stack | 06-08 | [application/docker-compose.yml](application/docker-compose.yml) |
-| CI pipeline | test -> build -> secret scan -> image build -> Trivy gate -> publish | 16, 17 | [ci/pragya-library-ci.yml](ci/pragya-library-ci.yml), [scripts/ci-local.sh](scripts/ci-local.sh) |
+| CI pipeline | test -> build -> secret scan -> image build -> Trivy gate -> publish | 16, 17 | [.github/workflows/session21-library-ci.yml](../.github/workflows/session21-library-ci.yml), [scripts/ci-local.sh](scripts/ci-local.sh) |
 | Security | Trivy (images + Helm misconfig), gitleaks, Semgrep | 17 | section 5 |
 | Kubernetes | Deployments, StatefulSet + PVC, Services, Ingress, HPA, probes, Secret | 9-13 | [helm/pragya-library](helm/pragya-library) |
 | Packaging | Helm chart `pragya-library` | 15 | [helm/pragya-library](helm/pragya-library) |
@@ -135,9 +135,9 @@ Commits for this project, all on `main` of this repository:
 
 ## 4. CI pipeline
 
-[ci/pragya-library-ci.yml](ci/pragya-library-ci.yml) is a full GitHub Actions workflow: pytest + frontend build -> gitleaks + Trivy filesystem/config scan -> build both images tagged with the commit SHA -> Trivy gate on both images -> push to GHCR -> **update the image tag in the Helm values in Git** (so Argo CD deploys it; CI never talks to the cluster).
+[.github/workflows/session21-library-ci.yml](../.github/workflows/session21-library-ci.yml) is the GitHub Actions pipeline for this project: pytest + frontend build and a gitleaks scan of the project folder -> build both images tagged with the commit SHA -> Trivy misconfiguration report + Trivy gate on both images -> push to GHCR -> **preview the image-tag change in the Helm values** (shown in the run summary). The tag change is not committed by CI, so every commit in the repo stays mine; Argo CD deploys whatever tag is committed to Git, and CI never talks to the cluster.
 
-**Honest note:** GitHub only runs workflows from `.github/workflows/` at the repository root. That folder is shared by all sessions of this assignment, so I kept this workflow inside my project folder and did **not** activate it. A GitHub Actions pipeline that really runs and pushes to GHCR is already part of this repo from Session 16. For this project I ran exactly the same stages locally with [scripts/ci-local.sh](scripts/ci-local.sh); instead of pushing to a registry, the last stage imports the images into both kind nodes ([scripts/kind-load.sh](scripts/kind-load.sh) - plain `kind load docker-image` fails on Docker Desktop for multi-platform images with `content digest ... not found`).
+Before activating it on GitHub I ran the same stages locally with [scripts/ci-local.sh](scripts/ci-local.sh); locally, instead of pushing to a registry, the last stage imports the images into both kind nodes ([scripts/kind-load.sh](scripts/kind-load.sh) - plain `kind load docker-image` fails on Docker Desktop for multi-platform images with `content digest ... not found`). The run on GitHub is in [Pipeline run on GitHub](#pipeline-run-on-github) below.
 
 The first full run **stopped at the Trivy gate**, before any image could be published:
 

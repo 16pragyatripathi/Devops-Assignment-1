@@ -1,0 +1,165 @@
+# Session 21 - Campus Library CI/CD
+# Pragya Tripathi (24BCS10032)
+#
+#   test (pytest + frontend build) ─┐
+#   secrets (gitleaks)             ─┴─> build, scan & publish (Trivy gate -> GHCR) ─> gitops tag (preview)
+#
+# Same stages as 21_Final_DevOps_Project/scripts/ci-local.sh, but on GitHub.
+# The last job only PREVIEWS the image-tag change for the Helm values; it does
+# not commit it, so the history keeps a single author. Argo CD deploys whatever
+# tag is committed to Git.
+#
+# Every third-party action is pinned to a full commit SHA (tags can be moved).
+name: Session 21 Campus Library CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '21_Final_DevOps_Project/**'
+      - '.github/workflows/session21-library-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '21_Final_DevOps_Project/**'
+      - '.github/workflows/session21-library-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: session21-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_DIR: 21_Final_DevOps_Project
+  APP_DIR: 21_Final_DevOps_Project/application
+  TRIVY_VERSION: v0.75.0
+  GITLEAKS_VERSION: 8.30.1
+
+jobs:
+  # ------------------------------------------------------------ 1. tests
+  test:
+    name: Backend tests + frontend build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Backend tests (pytest, SQLite test DB)
+        working-directory: ${{ env.APP_DIR }}/backend
+        run: |
+          pip install -q -r requirements-dev.txt
+          python -m pytest -v -p no:cacheprovider -W ignore::DeprecationWarning
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Frontend build
+        working-directory: ${{ env.APP_DIR }}/frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+  # ------------------------------------------------------------ 2. secrets
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install gitleaks (checksum verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" gitleaks
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: GATE - scan the project folder (any leak fails)
+        run: gitleaks dir "$PROJECT_DIR" --no-banner --redact -v
+
+  # ------------------------------------------------------------ 3. images
+  build-scan-publish:
+    name: Build, Trivy gate & push to GHCR
+    needs: [test, secrets]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Image names (GHCR needs a lower-case owner)
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "BACKEND_IMAGE=ghcr.io/$owner/pragya-library-backend:${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=ghcr.io/$owner/pragya-library-frontend:${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Build both images
+        run: |
+          docker build -t "$BACKEND_IMAGE" "$APP_DIR/backend"
+          docker build -t "$FRONTEND_IMAGE" "$APP_DIR/frontend"
+          docker image ls | grep pragya-library
+
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+      - name: Report - Trivy misconfiguration scan (Dockerfiles, k8s, Helm, Terraform)
+        run: trivy config --severity HIGH,CRITICAL --exit-code 0 "$PROJECT_DIR"
+
+      - name: GATE - Trivy image scan (fixable HIGH/CRITICAL fails)
+        run: |
+          trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$BACKEND_IMAGE"
+          trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "$FRONTEND_IMAGE"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push both images
+        if: github.event_name != 'pull_request'
+        run: |
+          docker push "$BACKEND_IMAGE"
+          docker push "$FRONTEND_IMAGE"
+          {
+            echo "### Published images"
+            echo "- \`$BACKEND_IMAGE\`"
+            echo "- \`$FRONTEND_IMAGE\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------ 4. gitops
+  gitops-tag-preview:
+    name: GitOps tag update (preview)
+    needs: build-scan-publish
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Show the Helm values change Argo CD would deploy
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          f="$PROJECT_DIR/helm/pragya-library/values.yaml"
+          sed -i "s|^  image: pragya-library-backend|  image: ghcr.io/$owner/pragya-library-backend|" "$f"
+          sed -i "s|^  image: pragya-library-frontend|  image: ghcr.io/$owner/pragya-library-frontend|" "$f"
+          sed -i "s|^  tag: \"1\..*\"|  tag: \"${GITHUB_SHA::7}\"|" "$f"
+          git --no-pager diff -- "$f" | tee values.diff
+          {
+            echo "### GitOps change (not committed)"
+            echo '```diff'
+            cat values.diff
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
