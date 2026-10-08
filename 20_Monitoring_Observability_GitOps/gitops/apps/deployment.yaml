@@ -7,7 +7,7 @@ metadata:
   labels:
     app: pragya-web
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: pragya-web
@@ -26,7 +26,7 @@ spec:
           command: ["./podinfo", "--port=9898", "--level=info"]
           env:
             - name: PODINFO_UI_MESSAGE
-              value: "Pragya Tripathi - Session 20 GitOps demo (v1)"
+              value: "Pragya Tripathi - Session 20 GitOps demo (v2)"
             - name: PODINFO_UI_COLOR
               value: "#34577c"
           ports:
