@@ -215,6 +215,10 @@ active
 active
 ```
 
+Re-run on the current cluster node (the cluster was recreated, so the dates and boot ID are newer than in the text above):
+
+![journalctl on the kind control-plane node](screenshots/l01-07-journalctl.png)
+
 ### Commands I practised
 
 | Command | Purpose |
