@@ -1,0 +1,31 @@
+# Applied once with kubectl. Argo CD then renders the Helm chart from GitHub
+# and keeps the s21-library namespace equal to what is committed.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pragya-library
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/16pragyatripathi/Devops-Assignment-1.git
+    targetRevision: main
+    path: 21_Final_DevOps_Project/helm/pragya-library
+    helm:
+      releaseName: pragya-library
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: s21-library
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+  # The HPA owns the backend replica count, so Argo CD must not fight it.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: pragya-library-backend
+      jsonPointers:
+        - /spec/replicas

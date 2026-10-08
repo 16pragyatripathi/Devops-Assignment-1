@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}-frontend
+  labels:
+    app: {{ .Values.name }}-frontend
+    {{- include "lib.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}-frontend
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}-frontend
+        version: {{ .Values.frontend.tag | quote }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101           # "nginx" user
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image }}:{{ .Values.frontend.tag }}"
+          imagePullPolicy: {{ .Values.frontend.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:            # the only places nginx writes to
+            - {name: cache, mountPath: /var/cache/nginx}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: cache, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}-frontend
+  labels:
+    app: {{ .Values.name }}-frontend
+    {{- include "lib.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: {{ .Values.name }}-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

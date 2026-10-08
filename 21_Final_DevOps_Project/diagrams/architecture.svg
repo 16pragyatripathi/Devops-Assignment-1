@@ -1,0 +1,174 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900" font-family="Helvetica, Arial, sans-serif">
+  <!-- Session 21 final project architecture - Pragya Tripathi (24BCS10032) -->
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3b4a5e"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/>
+    </marker>
+    <marker id="arrm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/>
+    </marker>
+    <style>
+      .t  { font-size: 15px; font-weight: 700; fill: #1d2433; }
+      .s  { font-size: 12px; fill: #3b4a5e; }
+      .xs { font-size: 11px; fill: #5d6b82; }
+      .zone { font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+      .box { fill: #ffffff; stroke: #9aa8bd; stroke-width: 1.3; rx: 8; }
+      .line { stroke: #3b4a5e; stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+      .git  { stroke: #c2410c; stroke-width: 1.8; fill: none; marker-end: url(#arrg); stroke-dasharray: 6 4; }
+      .mon  { stroke: #7c3aed; stroke-width: 1.6; fill: none; marker-end: url(#arrm); stroke-dasharray: 4 3; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="900" fill="#f6f8fb"/>
+  <text x="30" y="40" font-size="24" font-weight="700" fill="#1d2433">Campus Library - Session 21 Final DevOps Project</text>
+  <text x="30" y="64" class="s">Pragya Tripathi (24BCS10032) - code to monitored Kubernetes deployment, all running on my laptop</text>
+
+  <!-- ============ Developer / Git / CI column ============ -->
+  <rect x="30" y="90" width="330" height="780" rx="12" fill="#fff7ed" stroke="#fdba74"/>
+  <text x="46" y="114" class="zone" fill="#c2410c">BUILD AND DELIVER</text>
+
+  <rect class="box" x="55" y="130" width="280" height="62"/>
+  <text x="70" y="155" class="t">Developer laptop</text>
+  <text x="70" y="176" class="s">FastAPI + Vite app, docker compose</text>
+
+  <rect class="box" x="55" y="225" width="280" height="62"/>
+  <text x="70" y="250" class="t">GitHub repository</text>
+  <text x="70" y="271" class="s">16pragyatripathi/Devops-Assignment-1 (main)</text>
+
+  <rect class="box" x="55" y="320" width="280" height="200"/>
+  <text x="70" y="345" class="t">CI pipeline (scripts/ci-local.sh)</text>
+  <text x="70" y="370" class="s">1. pytest - 11 tests, SQLite test DB</text>
+  <text x="70" y="392" class="s">2. npm ci + vite build</text>
+  <text x="70" y="414" class="s">3. gitleaks secret scan</text>
+  <text x="70" y="436" class="s">4. docker build backend + frontend</text>
+  <text x="70" y="458" class="s">5. trivy gate: HIGH/CRITICAL fixable = fail</text>
+  <text x="70" y="480" class="s">6. load images into kind</text>
+  <text x="70" y="505" class="xs">same stages as ci/pragya-library-ci.yml</text>
+
+  <rect class="box" x="55" y="555" width="280" height="76"/>
+  <text x="70" y="580" class="t">Container images</text>
+  <text x="70" y="601" class="s">pragya-library-backend:1.x (python, uid 10001)</text>
+  <text x="70" y="620" class="s">pragya-library-frontend:1.x (nginx, uid 101)</text>
+
+  <rect class="box" x="55" y="665" width="280" height="180"/>
+  <text x="70" y="690" class="t">Terraform (IaC)</text>
+  <text x="70" y="712" class="s">AWS provider -> LocalStack :4566</text>
+  <text x="70" y="734" class="s">VPC 10.21.0.0/16, 2 public + 2 private</text>
+  <text x="70" y="756" class="s">subnets, IGW, NAT gateway, route tables</text>
+  <text x="70" y="778" class="s">S3 artifacts bucket (versioned)</text>
+  <text x="70" y="800" class="s">EKS + node group: plan only</text>
+  <text x="70" y="822" class="xs">(create_eks=true; not in LocalStack Community)</text>
+
+  <path class="line" d="M195,192 L195,222"/>
+  <text x="203" y="212" class="xs">git push</text>
+  <path class="line" d="M195,287 L195,317"/>
+  <path class="line" d="M195,520 L195,552"/>
+
+  <!-- ============ Cluster ============ -->
+  <rect x="390" y="90" width="980" height="780" rx="12" fill="#eef4fb" stroke="#93b4d8"/>
+  <text x="406" y="114" class="zone" fill="#1f4f99">KIND CLUSTER devops-hw (Kubernetes v1.37, 2 nodes)</text>
+
+  <!-- argocd ns -->
+  <rect x="410" y="130" width="300" height="150" rx="10" fill="#fff1f2" stroke="#fda4af"/>
+  <text x="424" y="152" class="zone" fill="#be123c">namespace argocd</text>
+  <rect class="box" x="425" y="165" width="270" height="100"/>
+  <text x="440" y="190" class="t">Argo CD v3.5.4</text>
+  <text x="440" y="211" class="s">Application pragya-library</text>
+  <text x="440" y="231" class="s">renders helm/pragya-library from Git</text>
+  <text x="440" y="251" class="s">auto-sync, prune, self-heal</text>
+
+  <path class="git" d="M335,256 C380,256 380,215 422,215"/>
+  <text x="340" y="300" class="xs" fill="#c2410c">pull every 60s</text>
+
+  <!-- user + ingress -->
+  <rect class="box" x="760" y="130" width="250" height="62"/>
+  <text x="775" y="155" class="t">Browser / curl</text>
+  <text x="775" y="176" class="s">http://pragya-library.local:8081</text>
+
+  <rect class="box" x="1060" y="130" width="290" height="62"/>
+  <text x="1075" y="155" class="t">ingress-nginx controller</text>
+  <text x="1075" y="176" class="s">host port 8081 -> :80</text>
+  <path class="line" d="M1010,161 L1057,161"/>
+
+  <!-- app namespace -->
+  <rect x="730" y="215" width="620" height="420" rx="10" fill="#ecfdf5" stroke="#86efac"/>
+  <text x="744" y="237" class="zone" fill="#15803d">namespace s21-library (Helm release pragya-library)</text>
+
+  <rect class="box" x="750" y="252" width="580" height="44"/>
+  <text x="765" y="279" class="t">Ingress pragya-library</text>
+  <text x="960" y="279" class="s">/ -> frontend:80      /api -> backend:8000</text>
+  <path class="line" d="M1205,192 L1205,249"/>
+
+  <rect class="box" x="750" y="330" width="270" height="110"/>
+  <text x="765" y="355" class="t">frontend (Deployment x2)</text>
+  <text x="765" y="377" class="s">nginx serves the built Vite app</text>
+  <text x="765" y="398" class="s">proxies /api to backend Service</text>
+  <text x="765" y="419" class="s">probe /healthz, non-root</text>
+
+  <rect class="box" x="1060" y="330" width="270" height="130"/>
+  <text x="1075" y="355" class="t">backend (Deployment 2-5)</text>
+  <text x="1075" y="377" class="s">FastAPI + SQLAlchemy + Alembic</text>
+  <text x="1075" y="398" class="s">startup/ready/liveness probes</text>
+  <text x="1075" y="419" class="s">/metrics for Prometheus</text>
+  <text x="1075" y="440" class="s">HPA: CPU 60%, min 2, max 5</text>
+
+  <path class="line" d="M885,296 L885,327"/>
+  <path class="line" d="M1195,296 L1195,327"/>
+  <path class="line" d="M1020,385 L1057,385"/>
+
+  <rect class="box" x="1060" y="495" width="270" height="120"/>
+  <text x="1075" y="520" class="t">PostgreSQL 17 (StatefulSet)</text>
+  <text x="1075" y="542" class="s">PVC 1Gi on local-path storage</text>
+  <text x="1075" y="563" class="s">user/password from Secret</text>
+  <text x="1075" y="584" class="s">pragya-library-db (not in Git)</text>
+  <path class="line" d="M1195,460 L1195,492"/>
+
+  <rect class="box" x="750" y="470" width="270" height="145"/>
+  <text x="765" y="495" class="t">Helm chart objects</text>
+  <text x="765" y="517" class="s">2 Deployments, 1 StatefulSet</text>
+  <text x="765" y="538" class="s">3 Services, 1 Ingress, 1 HPA</text>
+  <text x="765" y="559" class="s">image tag + version in values.yaml</text>
+  <text x="765" y="580" class="s">changing values.yaml in Git =</text>
+  <text x="765" y="601" class="s">a new rollout</text>
+
+  <path class="git" d="M695,230 C720,230 720,380 747,380"/>
+  <text x="580" y="305" class="xs" fill="#c2410c">apply / prune / heal</text>
+
+  <!-- monitoring ns -->
+  <rect x="410" y="660" width="940" height="200" rx="10" fill="#f5f3ff" stroke="#c4b5fd"/>
+  <text x="660" y="682" class="zone" fill="#6d28d9">namespace monitoring (Session 20 stack, reused)</text>
+
+  <rect class="box" x="425" y="700" width="210" height="100"/>
+  <text x="440" y="725" class="t">Prometheus v3.5</text>
+  <text x="440" y="747" class="s">pod discovery by annotation</text>
+  <text x="440" y="768" class="s">cAdvisor, kubelet</text>
+  <text x="440" y="789" class="s">rules: s20 + s21 alerts</text>
+
+  <rect class="box" x="660" y="700" width="200" height="100"/>
+  <text x="675" y="725" class="t">kube-state-metrics</text>
+  <text x="675" y="747" class="s">Deployment / HPA /</text>
+  <text x="675" y="768" class="s">Pod readiness as metrics</text>
+
+  <rect class="box" x="885" y="700" width="210" height="100"/>
+  <text x="900" y="725" class="t">Alertmanager</text>
+  <text x="900" y="747" class="s">groups alerts, sends to</text>
+  <text x="900" y="768" class="s">webhook receiver Pod</text>
+  <text x="900" y="789" class="s">(stands in for Slack)</text>
+
+  <rect class="box" x="1120" y="700" width="210" height="100"/>
+  <text x="1135" y="725" class="t">Grafana 12.1</text>
+  <text x="1135" y="747" class="s">datasource + dashboards</text>
+  <text x="1135" y="768" class="s">provisioned from</text>
+  <text x="1135" y="789" class="s">ConfigMaps</text>
+
+  <path class="mon" d="M1330,420 L1360,420 L1360,648 L530,648 L530,697"/>
+  <text x="1000" y="644" class="xs" fill="#7c3aed">Prometheus scrapes backend /metrics</text>
+  <path class="mon" d="M657,750 L638,750"/>
+  <path class="mon" d="M530,800 L530,815 L990,815 L990,803"/>
+  <text x="700" y="829" class="xs" fill="#7c3aed">firing alerts</text>
+  <path class="mon" d="M1225,800 L1225,838 L560,838 L560,803"/>
+  <text x="900" y="852" class="xs" fill="#7c3aed">PromQL queries</text>
+</svg>

@@ -1,0 +1,5 @@
+# Fault 2: the backend Service selects a label no Pod has (typo "pragya-libary").
+# Applied with: kubectl -n s21-troubleshoot patch svc pragya-library-backend --patch-file fault2-service-selector.yaml
+spec:
+  selector:
+    app: pragya-libary-backend

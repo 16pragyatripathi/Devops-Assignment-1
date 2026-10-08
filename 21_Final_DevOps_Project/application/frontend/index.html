@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pragya Campus Library</title>
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>Campus Library</h1>
+        <p class="sub">Book tracker &middot; Session 21 final DevOps project &middot; Pragya Tripathi</p>
+      </div>
+      <span id="version" class="pill">frontend v1.0.0</span>
+    </header>
+
+    <main>
+      <section class="kpis">
+        <div class="kpi"><span>Titles</span><strong id="k-titles">-</strong></div>
+        <div class="kpi"><span>Total copies</span><strong id="k-total">-</strong></div>
+        <div class="kpi"><span>On the shelf</span><strong id="k-available">-</strong></div>
+        <div class="kpi"><span>Issued</span><strong id="k-issued">-</strong></div>
+      </section>
+
+      <section class="card">
+        <h2>Add a book</h2>
+        <form id="add-form">
+          <input name="title" placeholder="Title" required />
+          <input name="author" placeholder="Author" required />
+          <select name="category">
+            <option>DEVOPS</option><option>CLOUD</option><option>PROGRAMMING</option>
+            <option>SYSTEMS</option><option>GENERAL</option>
+          </select>
+          <input name="total_copies" type="number" min="1" max="100" value="1" />
+          <button type="submit">Add</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <h2>Books</h2>
+          <select id="filter">
+            <option value="">All categories</option>
+            <option>DEVOPS</option><option>CLOUD</option><option>PROGRAMMING</option>
+            <option>SYSTEMS</option><option>GENERAL</option>
+          </select>
+        </div>
+        <p id="error" class="error" hidden></p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Title</th><th>Author</th><th>Category</th><th>Available</th><th></th></tr></thead>
+            <tbody id="books"><tr><td colspan="6">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <footer id="backend-info">backend: checking...</footer>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+# Bootstrap: the namespace the app runs in. Applied once before Argo CD syncs.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: s21-library
+  labels:
+    owner: pragya
+    app.kubernetes.io/part-of: pragya-library

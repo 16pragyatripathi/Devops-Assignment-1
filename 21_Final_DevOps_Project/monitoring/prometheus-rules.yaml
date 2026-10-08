@@ -1,0 +1,52 @@
+# Alerting rules for the Campus Library app. Mounted into the Session 20
+# Prometheus through its projected "rules" volume (ConfigMap name must match).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pragya-s21-prometheus-rules
+  namespace: monitoring
+data:
+  s21-alerts.yml: |
+    groups:
+      - name: pragya-s21-library
+        rules:
+          - alert: LibraryBackendDown
+            expr: sum(up{namespace="s21-library", app="pragya-library-backend"}) < 1 or absent(up{namespace="s21-library", app="pragya-library-backend"})
+            for: 1m
+            labels: {severity: critical, namespace: s21-library}
+            annotations:
+              summary: "No backend Pod of pragya-library is being scraped successfully"
+
+          - alert: LibraryNoReadyBackend
+            expr: kube_deployment_status_replicas_available{namespace="s21-library", deployment="pragya-library-backend"} < 1
+            for: 1m
+            labels: {severity: critical}
+            annotations:
+              summary: "pragya-library-backend has 0 available replicas - the API is down"
+
+          - alert: LibraryHigh5xxRate
+            expr: |
+              sum(rate(http_requests_total{namespace="s21-library", status="5xx"}[2m]))
+                /
+              sum(rate(http_requests_total{namespace="s21-library"}[2m])) > 0.05
+            for: 1m
+            labels: {severity: critical, namespace: s21-library}
+            annotations:
+              summary: "{{ $value | humanizePercentage }} of library API requests return 5xx"
+
+          - alert: LibraryHighLatencyP95
+            expr: |
+              histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="s21-library", handler!="/metrics"}[5m]))) > 0.5
+            for: 2m
+            labels: {severity: warning, namespace: s21-library}
+            annotations:
+              summary: "Library API p95 latency is {{ $value | humanizeDuration }}"
+
+          - alert: LibraryHPAAtMaxReplicas
+            expr: |
+              kube_horizontalpodautoscaler_status_current_replicas{namespace="s21-library"}
+                >= kube_horizontalpodautoscaler_spec_max_replicas{namespace="s21-library"}
+            for: 5m
+            labels: {severity: warning}
+            annotations:
+              summary: "HPA {{ $labels.horizontalpodautoscaler }} is stuck at max replicas - add capacity"

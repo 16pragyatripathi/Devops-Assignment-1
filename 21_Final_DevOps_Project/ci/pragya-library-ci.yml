@@ -1,0 +1,105 @@
+# GitHub Actions pipeline for the Campus Library project.
+# NOTE: GitHub only runs workflows from .github/workflows/ at the repo root.
+# This copy lives inside the project folder; to activate it, copy it to
+# .github/workflows/session21-library.yml. I ran the same stages locally with
+# scripts/ci-local.sh (output in the README).
+name: Session 21 - Campus Library CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths: ["21_Final_DevOps_Project/**"]
+  pull_request:
+    paths: ["21_Final_DevOps_Project/**"]
+
+env:
+  APP_DIR: 21_Final_DevOps_Project/application
+  REGISTRY: ghcr.io
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Backend tests (pytest, SQLite test DB)
+        working-directory: ${{ env.APP_DIR }}/backend
+        run: |
+          pip install -r requirements-dev.txt
+          pytest -v
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+      - name: Frontend build
+        working-directory: ${{ env.APP_DIR }}/frontend
+        run: npm ci && npm run build
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
+      - name: Dependency + IaC misconfiguration scan (trivy fs/config)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: 21_Final_DevOps_Project
+          scanners: vuln,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  build-scan-push:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    permissions: {contents: read, packages: write}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build images tagged with the commit SHA
+        run: |
+          docker build -t $REGISTRY/${{ github.repository_owner }}/pragya-library-backend:${{ github.sha }} $APP_DIR/backend
+          docker build -t $REGISTRY/${{ github.repository_owner }}/pragya-library-frontend:${{ github.sha }} $APP_DIR/frontend
+      - name: Trivy gate - backend image
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/pragya-library-backend:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Trivy gate - frontend image
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/pragya-library-frontend:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Push
+        run: |
+          docker push $REGISTRY/${{ github.repository_owner }}/pragya-library-backend:${{ github.sha }}
+          docker push $REGISTRY/${{ github.repository_owner }}/pragya-library-frontend:${{ github.sha }}
+
+  # GitOps: CI does not run kubectl/helm against the cluster. It only changes
+  # the image tag in Git; Argo CD (inside the cluster) pulls the change.
+  bump-gitops-tag:
+    needs: build-scan-push
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Point the Helm values at the new images
+        run: |
+          f=21_Final_DevOps_Project/helm/pragya-library/values.yaml
+          sed -i "s|^  image: pragya-library-backend|  image: ghcr.io/${{ github.repository_owner }}/pragya-library-backend|" $f
+          sed -i "s|^  image: pragya-library-frontend|  image: ghcr.io/${{ github.repository_owner }}/pragya-library-frontend|" $f
+          sed -i "s|^  tag: .*|  tag: \"${{ github.sha }}\"|" $f
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "Deploy pragya-library ${{ github.sha }}" && git push

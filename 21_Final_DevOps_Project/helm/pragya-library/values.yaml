@@ -1,0 +1,46 @@
+# Default values for the pragya-library chart.
+name: pragya-library
+
+backend:
+  image: pragya-library-backend
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent      # images are built locally and loaded into kind
+  replicas: 2
+  resources:
+    requests: {cpu: 50m, memory: 96Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+frontend:
+  image: pragya-library-frontend
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {cpu: 100m, memory: 64Mi}
+
+postgres:
+  image: postgres:17-alpine
+  database: library
+  # Username/password are NOT in Git. They are read from this Secret, which I
+  # create with kubectl before the first sync (keys: username, password).
+  existingSecret: pragya-library-db
+  storage: 1Gi
+  resources:
+    requests: {cpu: 50m, memory: 96Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+ingress:
+  enabled: true
+  className: nginx
+  host: pragya-library.local
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  cpuUtilization: 60
+
+metrics:
+  # Pods get prometheus.io/* annotations; the Session 20 Prometheus discovers them.
+  scrape: true

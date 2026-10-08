@@ -1,0 +1,9 @@
+apiVersion: v2
+name: pragya-library
+description: Campus Library book tracker (FastAPI + PostgreSQL + nginx frontend) - Session 21 final project
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Pragya Tripathi
+    email: pragya.24bcs10032@sst.scaler.com

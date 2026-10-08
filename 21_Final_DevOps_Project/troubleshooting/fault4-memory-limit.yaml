@@ -1,0 +1,5 @@
+# Fault 4: memory limit far below what Python + FastAPI + SQLAlchemy need.
+backend:
+  resources:
+    requests: {cpu: 50m, memory: 32Mi}
+    limits: {cpu: 500m, memory: 40Mi}

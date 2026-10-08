@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}-backend
+  labels:
+    app: {{ .Values.name }}-backend
+    {{- include "lib.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.backend.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}-backend
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}-backend
+        version: {{ .Values.backend.tag | quote }}
+      {{- if .Values.metrics.scrape }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+      {{- end }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image }}:{{ .Values.backend.tag }}"
+          imagePullPolicy: {{ .Values.backend.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: APP_VERSION
+              value: {{ .Values.backend.tag | quote }}
+            - name: DB_USER
+              valueFrom: {secretKeyRef: {name: {{ .Values.postgres.existingSecret }}, key: username}}
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.postgres.existingSecret }}, key: password}}
+            - name: DATABASE_URL
+              value: "postgresql+psycopg://$(DB_USER):$(DB_PASSWORD)@{{ .Values.name }}-postgres:5432/{{ .Values.postgres.database }}"
+          startupProbe:          # gives Alembic time to run migrations on first start
+            httpGet: {path: /health, port: http}
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:        # only receive traffic when the database answers
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 10
+            failureThreshold: 2
+          livenessProbe:         # restart only if the process itself hangs
+            httpGet: {path: /health, port: http}
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}-backend
+  labels:
+    app: {{ .Values.name }}-backend
+    {{- include "lib.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: {{ .Values.name }}-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

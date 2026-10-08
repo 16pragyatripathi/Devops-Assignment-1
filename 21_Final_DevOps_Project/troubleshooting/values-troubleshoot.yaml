@@ -1,0 +1,10 @@
+# Separate copy of the app in namespace s21-troubleshoot, installed with plain
+# Helm (not Argo CD), so that self-heal does not undo the faults I inject.
+ingress:
+  enabled: false
+hpa:
+  enabled: false
+backend:
+  replicas: 2
+frontend:
+  replicas: 1

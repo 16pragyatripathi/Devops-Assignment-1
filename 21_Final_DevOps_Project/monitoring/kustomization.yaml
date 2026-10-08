@@ -1,0 +1,12 @@
+# kubectl apply -k monitoring/   adds the Session 21 rules + dashboard to the Session 20 stack
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - prometheus-rules.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+  - name: pragya-grafana-dashboard-s21
+    namespace: monitoring
+    files:
+      - grafana/pragya-s21-library.json

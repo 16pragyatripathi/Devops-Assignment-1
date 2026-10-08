@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars and adjust. Never put access keys in this file.
+project            = "pragya-library"
+aws_region         = "ap-south-1"
+use_localstack     = true
+create_nat_gateway = true
+create_eks         = false   # true only on real AWS (EKS is not in LocalStack Community)
+node_instance_type = "t3.medium"
+node_desired_size  = 2
