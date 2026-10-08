@@ -1,0 +1,221 @@
+# Session 16 - CI/CD with GitHub Actions
+# Pragya Tripathi (24BCS10032)
+#
+#   CI:  unit tests on a Node matrix + smoke test  ->  build artifact (npm pack)
+#   CD:  build + push image to GHCR  ->  deploy to a throw-away kind cluster
+#
+# Only runs when the Session 16 folder or this file changes (path filter),
+# or when started by hand from the Actions tab (workflow_dispatch).
+name: Session 16 CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '16_CICD_GitHub_Actions/**'
+      - '.github/workflows/session16-cicd.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '16_CICD_GitHub_Actions/**'
+      - '.github/workflows/session16-cicd.yml'
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the older, still-running pipeline.
+concurrency:
+  group: session16-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege by default; the docker job asks for packages: write itself.
+permissions:
+  contents: read
+
+env:
+  APP_DIR: 16_CICD_GitHub_Actions/app
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/pragya-cicd-demo
+
+jobs:
+  # ------------------------------------------------------------------ CI
+  test:
+    name: Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v7
+
+      - name: Set up Node ${{ matrix.node }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Unit + integration tests
+        run: npm test
+
+      - name: Smoke test the running server
+        run: |
+          PORT=3000 APP_VERSION="ci-${GITHUB_SHA::7}" node src/server.js &
+          bash scripts/smoke-test.sh http://localhost:3000
+
+  build-artifact:
+    name: Build artifact
+    runs-on: ubuntu-24.04
+    needs: test
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Package the app (npm pack) and write build info
+        run: |
+          mkdir -p dist
+          npm pack --pack-destination dist
+          {
+            echo "app=pragya-cicd-demo"
+            echo "commit=${GITHUB_SHA}"
+            echo "run=${GITHUB_RUN_NUMBER}"
+            echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "node=$(node --version)"
+          } > dist/build-info.txt
+          ls -l dist
+          tar -tzf dist/*.tgz
+
+      - name: Upload the build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pragya-cicd-demo-${{ github.sha }}
+          path: ${{ env.APP_DIR }}/dist/
+          retention-days: 7
+
+  # ------------------------------------------------------------------ CD
+  docker:
+    name: Build & push image (GHCR)
+    runs-on: ubuntu-24.04
+    needs: [test, build-artifact]
+    # Never publish from a pull request - only from main or a manual run.
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write          # needed to push to ghcr.io
+    outputs:
+      image: ${{ steps.tags.outputs.sha_tag }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Work out the image tags
+        id: tags
+        run: |
+          echo "sha_tag=${IMAGE_NAME}:${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=${IMAGE_NAME}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU (for the arm64 build)
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # short-lived token made for this run
+
+      - name: Build and push (amd64 + arm64)
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ env.APP_DIR }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: APP_VERSION=${{ github.sha }}
+          tags: |
+            ${{ steps.tags.outputs.sha_tag }}
+            ${{ steps.tags.outputs.latest_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Write the job summary
+        run: |
+          {
+            echo "### Image pushed to GHCR"
+            echo ""
+            echo "- \`${{ steps.tags.outputs.sha_tag }}\`"
+            echo "- \`${{ steps.tags.outputs.latest_tag }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy to kind (ephemeral)
+    runs-on: ubuntu-24.04
+    needs: docker
+    environment: kind-ephemeral
+    permissions:
+      contents: read
+      packages: read           # pull the image we just pushed
+    env:
+      IMAGE: ${{ needs.docker.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create a kind cluster on the runner
+        uses: helm/kind-action@v1.15.0
+        with:
+          cluster_name: pragya-ci
+
+      # The cluster pulls straight from GHCR, like a real cluster would.
+      # GHCR packages start private, so give the cluster a pull secret.
+      - name: Give the cluster a GHCR pull secret
+        run: |
+          until kubectl get serviceaccount default > /dev/null 2>&1; do sleep 1; done
+          kubectl create secret docker-registry ghcr-pull \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GITHUB_TOKEN }}"
+          kubectl patch serviceaccount default \
+            -p '{"imagePullSecrets": [{"name": "ghcr-pull"}]}'
+
+      - name: Render and apply the manifests
+        run: |
+          sed -e "s|IMAGE_PLACEHOLDER|${IMAGE}|" \
+              -e "s|VERSION_PLACEHOLDER|${GITHUB_SHA::7}|" \
+              16_CICD_GitHub_Actions/k8s/deployment.yaml > rendered.yaml
+          grep -n 'image:' rendered.yaml
+          kubectl apply -f rendered.yaml
+
+      - name: Wait for the rollout
+        run: |
+          kubectl rollout status deployment/pragya-cicd-demo --timeout=120s
+          kubectl get deploy,pods,svc -l app=pragya-cicd-demo -o wide
+          kubectl get svc pragya-cicd-demo
+
+      - name: Smoke test through the Service
+        run: |
+          kubectl port-forward svc/pragya-cicd-demo 8080:80 &
+          bash "${APP_DIR}/scripts/smoke-test.sh" http://localhost:8080
+
+      - name: Write the job summary
+        run: |
+          {
+            echo "### Deployed to an ephemeral kind cluster"
+            echo ""
+            echo "Image: \`${IMAGE}\`"
+            echo ""
+            echo '```'
+            kubectl get pods -l app=pragya-cicd-demo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

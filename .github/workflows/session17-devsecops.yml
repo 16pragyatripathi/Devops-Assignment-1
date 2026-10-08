@@ -1,0 +1,378 @@
+# Session 17 - Complete CI/CD with DevSecOps
+# Pragya Tripathi (24BCS10032)
+#
+#   unit-test ─┐
+#   sast      ─┤
+#   sca       ─┼─> image (build, IaC scan, image scan) ─> security-gate ─> publish (GHCR) ─> deploy (kind)
+#   secrets   ─┘
+#
+# Gate policy (explained in 17_CICD_DevSecOps/README.md):
+#   * Everything that SHIPS (17_CICD_DevSecOps/app, the hardened image, the k8s
+#     manifests) is scanned in BLOCKING mode - any finding over the threshold
+#     fails the job, the security-gate job fails, and nothing is pushed/deployed.
+#   * The intentionally insecure training material (samples/, the "normal"
+#     Dockerfile image) is scanned in REPORT mode - findings are printed, saved
+#     as artifacts and counted in the run summary, but cannot block.
+#
+# Every third-party action is pinned to a full commit SHA (tags can be moved).
+name: Session 17 DevSecOps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '17_CICD_DevSecOps/**'
+      - '.github/workflows/session17-devsecops.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '17_CICD_DevSecOps/**'
+      - '.github/workflows/session17-devsecops.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: session17-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  S17_DIR: 17_CICD_DevSecOps
+  APP_DIR: 17_CICD_DevSecOps/app
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/pragya-devsecops-demo
+  TRIVY_VERSION: v0.75.0
+  GITLEAKS_VERSION: 8.30.1
+  SEMGREP_IMAGE: semgrep/semgrep:1.178.0
+  SEMGREP_RULES: --config p/default --config p/security-audit --config p/secrets
+
+jobs:
+  # ------------------------------------------------------------ 1. build + test
+  unit-test:
+    name: Build & unit test
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ env.APP_DIR }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Install exactly what the lockfile says
+        run: npm ci --ignore-scripts
+      - name: Unit + integration tests
+        run: npm test
+      - name: Smoke test the server
+        run: |
+          PORT=3000 node src/server.js &
+          bash scripts/smoke-test.sh http://localhost:3000
+
+  # ------------------------------------------------------------ 2. SAST
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pull the Semgrep image
+        run: docker pull "$SEMGREP_IMAGE"
+
+      - name: Report - scan the whole Session 17 folder (includes the unsafe sample)
+        run: |
+          mkdir -p reports
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan $SEMGREP_RULES --metrics=off \
+              --json-output=reports/semgrep-report.json \
+              --sarif-output=reports/semgrep-report.sarif \
+              "$S17_DIR"
+          echo "SEMGREP_REPORT_FINDINGS=$(jq '.results | length' reports/semgrep-report.json)" >> "$GITHUB_ENV"
+
+      - name: GATE - scan only what ships (app/ + k8s/), any finding fails the job
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan $SEMGREP_RULES --metrics=off --error "$APP_DIR" "$S17_DIR/k8s"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### SAST (Semgrep)"
+            echo "- report scan of \`$S17_DIR\` (incl. intentionally unsafe sample): **${SEMGREP_REPORT_FINDINGS:-?} findings** (report only)"
+            echo "- gate scan of \`$APP_DIR\` + \`$S17_DIR/k8s\`: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sast-semgrep-reports
+          path: reports/
+          retention-days: 14
+
+  # ------------------------------------------------------------ 3. SCA
+  sca:
+    name: SCA (npm audit + Trivy fs)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+      - name: Report - npm audit of the intentionally outdated sample
+        working-directory: ${{ env.S17_DIR }}/samples/vulnerable-deps
+        run: npm audit --package-lock-only || true
+
+      - name: Report - Trivy fs of the whole Session 17 folder
+        run: |
+          mkdir -p reports
+          trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 0 "$S17_DIR"
+          trivy fs --scanners vuln --format json --output reports/trivy-fs-report.json "$S17_DIR"
+
+      - name: GATE - npm audit of the app (high or critical fails)
+        working-directory: ${{ env.APP_DIR }}
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: GATE - Trivy fs of the app (HIGH/CRITICAL fails)
+        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "$APP_DIR"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: sca-reports
+          path: reports/
+          retention-days: 14
+
+  # ------------------------------------------------------------ 4. secrets
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0          # full history: a secret deleted later is still leaked
+
+      - name: Install gitleaks (checksum verified)
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" gitleaks
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+
+      - name: Report - unsafe sample, ignoring gitleaks:allow markers
+        run: |
+          mkdir -p reports
+          gitleaks dir "$S17_DIR" --no-banner --redact -v --ignore-gitleaks-allow \
+            --exit-code 0 --report-format json --report-path reports/gitleaks-sample.json
+
+      - name: Report - whole repository, full history
+        run: |
+          gitleaks git . --no-banner --redact -v \
+            --exit-code 0 --report-format json --report-path reports/gitleaks-repo-history.json
+
+      - name: GATE - full history of Session 17 + workflows (any leak fails)
+        run: |
+          gitleaks git . --no-banner --redact -v \
+            --log-opts="--all -- $S17_DIR .github/workflows"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Secret scanning (gitleaks)"
+            echo "- sample folder with allow-markers ignored: **$(jq length reports/gitleaks-sample.json 2>/dev/null || echo ?) finding(s)** (report only)"
+            echo "- whole repo, full history: **$(jq length reports/gitleaks-repo-history.json 2>/dev/null || echo ?) finding(s)** (report only, triaged in README)"
+            echo "- gate (Session 17 + workflows history): **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: secret-scan-reports
+          path: reports/
+          retention-days: 14
+
+  # ------------------------------------------------------------ 5. image
+  image:
+    name: Image build, scan & gate
+    runs-on: ubuntu-24.04
+    needs: [unit-test, sast, sca, secrets]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+      - name: Build both images (normal + hardened)
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          docker build -t pragya-devsecops-demo:normal -f ../samples/normal.Dockerfile .
+          docker build -t pragya-devsecops-demo:hardened -f Dockerfile \
+            --build-arg APP_VERSION="${GITHUB_SHA::7}" .
+          docker image ls pragya-devsecops-demo
+
+      - name: GATE - Trivy misconfiguration scan of hardened Dockerfile + k8s manifests
+        run: |
+          trivy config --severity HIGH,CRITICAL --exit-code 1 "$APP_DIR/Dockerfile"
+          trivy config --severity HIGH,CRITICAL --exit-code 1 "$S17_DIR/k8s"
+
+      - name: Report - Trivy misconfiguration scan of the normal Dockerfile
+        run: trivy config --severity HIGH,CRITICAL --exit-code 0 "$S17_DIR/samples/normal.Dockerfile"
+
+      - name: Report - Trivy scan of the NORMAL image (never shipped)
+        run: |
+          mkdir -p reports
+          trivy image --severity HIGH,CRITICAL --exit-code 0 --format json \
+            --output reports/trivy-image-normal.json pragya-devsecops-demo:normal
+          trivy image --severity HIGH,CRITICAL --exit-code 0 pragya-devsecops-demo:normal | tail -n 40
+
+      - name: GATE - Trivy scan of the HARDENED image (fixable HIGH/CRITICAL fails)
+        run: |
+          trivy image --format json --output reports/trivy-image-hardened.json pragya-devsecops-demo:hardened
+          trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 pragya-devsecops-demo:hardened
+
+      - name: SBOM for the hardened image (CycloneDX)
+        run: trivy image --format cyclonedx --output reports/sbom-hardened.cdx.json pragya-devsecops-demo:hardened
+
+      - name: Summary
+        if: always()
+        run: |
+          count() { jq --arg s "$2" '[.Results[]?.Vulnerabilities[]? | select(.Severity==$s)] | length' "$1" 2>/dev/null || echo "?"; }
+          size() { docker image inspect "$1" --format '{{.Size}}' | awk '{printf "%.0f MB", $1/1000/1000}'; }
+          N=reports/trivy-image-normal.json; H=reports/trivy-image-hardened.json
+          {
+            echo "### Container images"
+            echo "| image | size | CRITICAL | HIGH | role |"
+            echo "|---|---|---|---|---|"
+            echo "| normal (\`node:24\`, root) | $(size pragya-devsecops-demo:normal) | $(count $N CRITICAL) | $(count $N HIGH) | report only, never pushed |"
+            echo "| hardened (distroless, uid 65532) | $(size pragya-devsecops-demo:hardened) | $(count $H CRITICAL) | $(count $H HIGH) | gated, pushed if clean |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save the exact scanned image for the publish job
+        run: docker save pragya-devsecops-demo:hardened | gzip > hardened-image.tar.gz
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hardened-image
+          path: hardened-image.tar.gz
+          retention-days: 1
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: image-scan-reports
+          path: reports/
+          retention-days: 14
+
+  # ------------------------------------------------------------ 6. gate
+  security-gate:
+    name: Security gate
+    runs-on: ubuntu-24.04
+    needs: [unit-test, sast, sca, secrets, image]
+    if: always()
+    steps:
+      - name: Decide
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "### Security gate" >> "$GITHUB_STEP_SUMMARY"
+          echo "| stage | result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "$RESULTS" | jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' >> "$GITHUB_STEP_SUMMARY"
+          bad=$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')
+          if [ -n "$bad" ]; then
+            echo "**BLOCKED** - failed or skipped: $bad. Nothing will be pushed or deployed." >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Security gate closed: $bad"
+            exit 1
+          fi
+          echo "**PASSED** - every blocking check is green." >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------ 7. publish
+  publish:
+    name: Push to GHCR
+    runs-on: ubuntu-24.04
+    needs: security-gate
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: hardened-image
+
+      - name: Load the image that passed the scans
+        run: gunzip -c hardened-image.tar.gz | docker load
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push
+        id: push
+        run: |
+          SHA_TAG="${IMAGE_NAME}:${GITHUB_SHA::7}"
+          docker tag pragya-devsecops-demo:hardened "$SHA_TAG"
+          docker tag pragya-devsecops-demo:hardened "${IMAGE_NAME}:latest"
+          docker push "$SHA_TAG"
+          docker push "${IMAGE_NAME}:latest"
+          echo "image=$SHA_TAG" >> "$GITHUB_OUTPUT"
+          echo "### Pushed \`$SHA_TAG\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ------------------------------------------------------------ 8. deploy
+  deploy:
+    name: Deploy to kind (restricted PSS)
+    runs-on: ubuntu-24.04
+    needs: publish
+    environment: kind-ephemeral
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.publish.outputs.image }}
+      NS: pragya-devsecops
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          cluster_name: pragya-ci
+
+      - name: Namespace (restricted Pod Security) + GHCR pull secret
+        run: |
+          kubectl apply -f "$S17_DIR/k8s/namespace.yaml"
+          kubectl -n "$NS" create secret docker-registry ghcr-pull \
+            --docker-server=ghcr.io \
+            --docker-username="${{ github.actor }}" \
+            --docker-password="${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Render and apply
+        run: |
+          sed "s|IMAGE_PLACEHOLDER|${IMAGE}|" "$S17_DIR/k8s/deployment.yaml" > rendered.yaml
+          grep -n 'image:' rendered.yaml
+          kubectl apply -f rendered.yaml
+          kubectl -n "$NS" rollout status deployment/pragya-devsecops-demo --timeout=120s
+          kubectl -n "$NS" get deploy,pods,svc -o wide
+
+      - name: Smoke test through the Service
+        run: |
+          kubectl -n "$NS" port-forward svc/pragya-devsecops-demo 8080:80 &
+          bash "$APP_DIR/scripts/smoke-test.sh" http://localhost:8080
+
+      - name: Prove the namespace refuses a root Pod
+        run: |
+          set +e
+          out=$(kubectl -n "$NS" run root-test --image=busybox:1.37 --restart=Never \
+                --overrides='{"spec":{"securityContext":{"runAsUser":0}}}' -- id 2>&1)
+          echo "$out"
+          echo "$out" | grep -q 'violates PodSecurity "restricted' || { echo "expected a PodSecurity rejection"; exit 1; }
