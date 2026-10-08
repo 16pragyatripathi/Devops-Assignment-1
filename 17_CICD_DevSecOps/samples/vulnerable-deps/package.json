@@ -1,0 +1,11 @@
+{
+  "name": "vulnerable-deps-sample",
+  "version": "1.0.0",
+  "description": "INTENTIONALLY outdated dependencies so the SCA stage has real CVEs to report. Never installed into the app image.",
+  "private": true,
+  "dependencies": {
+    "lodash": "4.17.20",
+    "minimist": "1.2.5",
+    "axios": "0.21.1"
+  }
+}

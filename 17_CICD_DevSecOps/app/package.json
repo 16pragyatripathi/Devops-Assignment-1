@@ -1,0 +1,16 @@
+{
+  "name": "pragya-devsecops-demo",
+  "version": "1.0.0",
+  "description": "Session 17 DevSecOps demo API - Pragya Tripathi (24BCS10032)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "author": "Pragya Tripathi <pragya.24bcs10032@sst.scaler.com>",
+  "license": "MIT",
+  "private": true
+}

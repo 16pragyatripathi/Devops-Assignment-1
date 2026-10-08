@@ -1,0 +1,73 @@
+# Session 17 - Deployment + Service for the HARDENED image only.
+# The namespace (namespace.yaml) enforces the "restricted" Pod Security
+# Standard, so every securityContext setting below is required, not optional.
+# IMAGE_PLACEHOLDER is replaced by the CD job with the image that passed the gate.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pragya-devsecops-demo
+  namespace: pragya-devsecops
+  labels:
+    app: pragya-devsecops-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pragya-devsecops-demo
+  template:
+    metadata:
+      labels:
+        app: pragya-devsecops-demo
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull       # created by the deploy job (GHCR packages start private)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 3000
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pragya-devsecops-demo
+  namespace: pragya-devsecops
+spec:
+  selector:
+    app: pragya-devsecops-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000

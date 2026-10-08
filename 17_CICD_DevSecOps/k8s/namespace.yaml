@@ -1,0 +1,10 @@
+# Namespace for the Session 17 app. The Pod Security Admission labels make the
+# API server REJECT any Pod that runs as root, allows privilege escalation,
+# keeps Linux capabilities or skips the seccomp profile.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pragya-devsecops
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
