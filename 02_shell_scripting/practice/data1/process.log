@@ -1,0 +1,5 @@
+Thu Oct  8 14:48:44 UTC 2026
+    PID TTY          TIME CMD
+      1 ?        00:00:00 sleep
+    344 ?        00:00:00 08_redirection.
+    357 ?        00:00:00 ps
