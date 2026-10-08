@@ -4,7 +4,7 @@ def test_health(client):
 
 def test_info_reports_version(client):
     body = client.get("/api/info").json()
-    assert body["version"] == "1.0.0"
+    assert body["version"] == "1.0.0"  # default from config.py; Kubernetes sets APP_VERSION
     assert body["hostname"]
 
 

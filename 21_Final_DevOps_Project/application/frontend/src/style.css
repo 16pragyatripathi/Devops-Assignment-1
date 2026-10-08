@@ -34,6 +34,9 @@ th { color: var(--muted); font-weight: 600; }
 .tag.cloud { background: #e6f0fd; color: #1f4f99; }
 .tag.programming { background: #fdf0e3; color: #8a4b0f; }
 .tag.systems { background: #f1e8fb; color: #5b2d91; }
+/* v1.1.0: rows with no copies left on the shelf are highlighted */
+tr.out td { background: #fff4f2; }
+tr.out td:nth-child(5) { color: var(--danger); font-weight: 600; }
 .error { color: var(--danger); margin: 0 0 8px; }
 footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 8px 0 24px; }
 @media (max-width: 720px) {

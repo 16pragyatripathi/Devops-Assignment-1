@@ -28,6 +28,20 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
+      # v1.1.0: on the first install the backend started before PostgreSQL was
+      # accepting connections, Alembic failed and the Pod restarted twice.
+      # This init container simply waits for the database.
+      initContainers:
+        - name: wait-for-db
+          image: {{ .Values.postgres.image }}
+          command: ["sh", "-c", "until pg_isready -h {{ .Values.name }}-postgres -p 5432; do echo waiting for database; sleep 2; done"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 32Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
       containers:
         - name: backend
           image: "{{ .Values.backend.image }}:{{ .Values.backend.tag }}"

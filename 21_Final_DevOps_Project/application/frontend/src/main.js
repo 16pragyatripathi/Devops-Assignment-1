@@ -1,6 +1,6 @@
 import "./style.css";
 
-const FRONTEND_VERSION = "1.0.0";
+const FRONTEND_VERSION = "1.1.0";
 const $ = (id) => document.getElementById(id);
 
 async function api(path, options = {}) {
@@ -30,7 +30,7 @@ async function refresh() {
     $("k-issued").textContent = stats.issued_copies;
     $("books").innerHTML = books.length
       ? books.map((b) => `
-        <tr>
+        <tr class="${b.available_copies === 0 ? "out" : ""}">
           <td>${b.id}</td><td>${escapeHtml(b.title)}</td><td>${escapeHtml(b.author)}</td>
           <td><span class="tag ${b.category.toLowerCase()}">${b.category}</span></td>
           <td>${b.available_copies} / ${b.total_copies}</td>

@@ -3,7 +3,7 @@ name: pragya-library
 
 backend:
   image: pragya-library-backend
-  tag: "1.0.0"
+  tag: "1.1.0"
   pullPolicy: IfNotPresent      # images are built locally and loaded into kind
   replicas: 2
   resources:
@@ -12,7 +12,7 @@ backend:
 
 frontend:
   image: pragya-library-frontend
-  tag: "1.0.0"
+  tag: "1.1.0"
   pullPolicy: IfNotPresent
   replicas: 2
   resources:
