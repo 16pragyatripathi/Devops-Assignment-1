@@ -1,0 +1,15 @@
+# Provider plugins downloaded by `terraform init`
+.terraform/
+# State can hold IDs, IPs and secrets - never commit it
+*.tfstate
+*.tfstate.*
+# Saved plans
+tfplan
+*.tfplan
+# Logs
+crash.log
+*.log
+# Real variable values stay local; the example file is committed
+*.tfvars
+!terraform.tfvars.example
+# .terraform.lock.hcl is intentionally committed (pins provider versions)

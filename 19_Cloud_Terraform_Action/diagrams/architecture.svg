@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 850" width="1100" height="850" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4a5563"/>
+    </marker>
+    <style>
+      .title   { font-size: 20px; font-weight: bold; fill: #1b2430; }
+      .sub     { font-size: 12.5px; fill: #5b6675; }
+      .h       { font-size: 13.5px; font-weight: bold; fill: #1b2430; }
+      .t       { font-size: 12px; fill: #1b2430; }
+      .s       { font-size: 11px; fill: #5b6675; }
+      .mono    { font-family: Menlo, Consolas, monospace; font-size: 11px; fill: #1b2430; }
+      .line    { stroke: #4a5563; stroke-width: 1.6; fill: none; }
+      .dash    { stroke-dasharray: 6 4; }
+    </style>
+  </defs>
+
+  <!-- page background -->
+  <rect x="0" y="0" width="1100" height="850" fill="#ffffff"/>
+
+  <!-- title -->
+  <text x="30" y="36" class="title">Session 19 – pragya-s19 VPC built with Terraform</text>
+  <text x="30" y="58" class="sub">Pragya Tripathi · 24BCS10032 · region ap-south-1 · applied on LocalStack 3.8 (AWS emulator in Docker)</text>
+
+  <!-- terraform -->
+  <rect x="30" y="85" width="250" height="88" rx="8" fill="#f1ecfb" stroke="#7b5cc4" stroke-width="1.5"/>
+  <text x="45" y="108" class="h">Terraform root module</text>
+  <text x="45" y="127" class="mono">providers.tf  variables.tf</text>
+  <text x="45" y="143" class="mono">network.tf    compute.tf</text>
+  <text x="45" y="159" class="mono">storage.tf    outputs.tf</text>
+  <path d="M155 173 L155 222" class="line" marker-end="url(#arrow)"/>
+  <text x="163" y="203" class="s">terraform apply</text>
+
+  <!-- internet + igw -->
+  <rect x="470" y="80" width="190" height="40" rx="20" fill="#eef3f8" stroke="#8a97a8" stroke-width="1.5"/>
+  <text x="565" y="105" class="h" text-anchor="middle">Internet</text>
+  <path d="M565 120 L565 148" class="line" marker-end="url(#arrow)"/>
+  <rect x="470" y="150" width="190" height="48" rx="6" fill="#ffffff" stroke="#3b7dd8" stroke-width="1.5"/>
+  <text x="565" y="170" class="h" text-anchor="middle">Internet Gateway</text>
+  <text x="565" y="187" class="s" text-anchor="middle">pragya-s19-igw</text>
+
+  <!-- region -->
+  <rect x="20" y="225" width="1060" height="610" rx="12" fill="#fbfcfe" stroke="#9aa6b5" stroke-width="1.5"/>
+  <text x="36" y="246" class="h">Region ap-south-1</text>
+
+  <!-- vpc -->
+  <rect x="40" y="258" width="820" height="562" rx="10" fill="#f4f8fd" stroke="#3b7dd8" stroke-width="2" stroke-dasharray="8 4"/>
+  <text x="56" y="280" class="h">VPC pragya-s19-vpc · 10.20.0.0/16</text>
+  <text x="380" y="280" class="s">DNS support + DNS hostnames enabled</text>
+
+  <!-- igw attaches to vpc -->
+  <path d="M565 198 L565 256" class="line" marker-end="url(#arrow)"/>
+
+  <!-- AZ a -->
+  <rect x="58" y="292" width="382" height="378" rx="8" fill="none" stroke="#9aa6b5" stroke-width="1.2" stroke-dasharray="4 4"/>
+  <text x="72" y="311" class="t" font-weight="bold">Availability Zone ap-south-1a</text>
+  <!-- AZ b -->
+  <rect x="460" y="292" width="382" height="378" rx="8" fill="none" stroke="#9aa6b5" stroke-width="1.2" stroke-dasharray="4 4"/>
+  <text x="474" y="311" class="t" font-weight="bold">Availability Zone ap-south-1b</text>
+
+  <!-- public subnet a -->
+  <rect x="72" y="322" width="354" height="150" rx="8" fill="#e9f6ec" stroke="#3f9a5a" stroke-width="1.5"/>
+  <text x="86" y="342" class="h">Public subnet 10.20.1.0/24</text>
+  <text x="86" y="358" class="s">pragya-s19-public-a · auto-assign public IP</text>
+  <rect x="86" y="370" width="160" height="88" rx="6" fill="#fff4e0" stroke="#d99a2b" stroke-width="1.5"/>
+  <text x="166" y="391" class="t" font-weight="bold" text-anchor="middle">EC2 pragya-s19-web-1</text>
+  <text x="166" y="408" class="s" text-anchor="middle">t3.micro · Amazon Linux 2023</text>
+  <text x="166" y="424" class="s" text-anchor="middle">user_data: nginx</text>
+  <text x="166" y="444" class="mono" text-anchor="middle">SG: web-sg</text>
+  <rect x="262" y="370" width="150" height="88" rx="6" fill="#ffffff" stroke="#3b7dd8" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="337" y="391" class="t" font-weight="bold" text-anchor="middle">NAT Gateway</text>
+  <text x="337" y="408" class="s" text-anchor="middle">+ Elastic IP</text>
+  <text x="337" y="424" class="s" text-anchor="middle">optional:</text>
+  <text x="337" y="440" class="mono" text-anchor="middle">enable_nat_gateway</text>
+
+  <!-- private subnet a -->
+  <rect x="72" y="490" width="354" height="166" rx="8" fill="#fdf0e6" stroke="#cf7a3a" stroke-width="1.5"/>
+  <text x="86" y="626" class="h">Private subnet 10.20.11.0/24</text>
+  <text x="86" y="643" class="s">pragya-s19-private-a · no public IPs</text>
+  <rect x="86" y="502" width="160" height="88" rx="6" fill="#fff4e0" stroke="#d99a2b" stroke-width="1.5"/>
+  <text x="166" y="523" class="t" font-weight="bold" text-anchor="middle">EC2 pragya-s19-app-1</text>
+  <text x="166" y="540" class="s" text-anchor="middle">t3.micro · backend</text>
+  <text x="166" y="556" class="s" text-anchor="middle">no public IP</text>
+  <text x="166" y="576" class="mono" text-anchor="middle">SG: app-sg</text>
+
+  <!-- web-1 -> app-1 (8080) -->
+  <path d="M140 458 L140 500" class="line" marker-end="url(#arrow)"/>
+  <text x="146" y="484" class="s">:8080 (app-sg)</text>
+  <!-- app-1 -> NAT (egress) -->
+  <path d="M246 546 L337 546 L337 460" class="line dash" marker-end="url(#arrow)"/>
+  <text x="256" y="540" class="s">outbound only</text>
+
+  <!-- public subnet b -->
+  <rect x="474" y="322" width="354" height="150" rx="8" fill="#e9f6ec" stroke="#3f9a5a" stroke-width="1.5"/>
+  <text x="488" y="342" class="h">Public subnet 10.20.2.0/24</text>
+  <text x="488" y="358" class="s">pragya-s19-public-b · auto-assign public IP</text>
+  <rect x="488" y="370" width="160" height="88" rx="6" fill="#fff4e0" stroke="#d99a2b" stroke-width="1.5"/>
+  <text x="568" y="391" class="t" font-weight="bold" text-anchor="middle">EC2 pragya-s19-web-2</text>
+  <text x="568" y="408" class="s" text-anchor="middle">t3.micro · Amazon Linux 2023</text>
+  <text x="568" y="424" class="s" text-anchor="middle">user_data: nginx</text>
+  <text x="568" y="444" class="mono" text-anchor="middle">SG: web-sg</text>
+
+  <!-- private subnet b -->
+  <rect x="474" y="490" width="354" height="166" rx="8" fill="#fdf0e6" stroke="#cf7a3a" stroke-width="1.5"/>
+  <text x="488" y="626" class="h">Private subnet 10.20.12.0/24</text>
+  <text x="488" y="643" class="s">pragya-s19-private-b · no public IPs</text>
+  <text x="488" y="528" class="t">Left empty on purpose: room for a second</text>
+  <text x="488" y="546" class="t">app server or an RDS Multi-AZ standby</text>
+  <text x="488" y="564" class="t">(needs a DB subnet group in 2 AZs).</text>
+
+  <!-- internet traffic into web servers -->
+  <path d="M520 198 L520 236 L315 236 L315 320" class="line" marker-end="url(#arrow)"/>
+  <path d="M610 198 L610 236 L760 236 L760 320" class="line" marker-end="url(#arrow)"/>
+  <text x="322" y="253" class="s">HTTP/HTTPS → public subnets (web-sg)</text>
+
+  <!-- route tables -->
+  <rect x="58" y="684" width="382" height="122" rx="8" fill="#ffffff" stroke="#3f9a5a" stroke-width="1.5"/>
+  <text x="72" y="705" class="h">Route table pragya-s19-public-rt</text>
+  <text x="72" y="726" class="mono">10.20.0.0/16  → local</text>
+  <text x="72" y="744" class="mono">0.0.0.0/0     → Internet Gateway</text>
+  <text x="72" y="768" class="s">associated with public-a and public-b</text>
+  <text x="72" y="786" class="s">(this route is what makes them "public")</text>
+
+  <rect x="460" y="684" width="382" height="122" rx="8" fill="#ffffff" stroke="#cf7a3a" stroke-width="1.5"/>
+  <text x="474" y="705" class="h">Route table pragya-s19-private-rt</text>
+  <text x="474" y="726" class="mono">10.20.0.0/16  → local</text>
+  <text x="474" y="744" class="mono">0.0.0.0/0     → NAT Gateway  (only if enabled)</text>
+  <text x="474" y="768" class="s">associated with private-a and private-b</text>
+  <text x="474" y="786" class="s">no route to the IGW: unreachable from the internet</text>
+
+  <!-- s3 -->
+  <rect x="878" y="292" width="186" height="150" rx="8" fill="#eef0fb" stroke="#5b6ad0" stroke-width="1.5"/>
+  <text x="892" y="313" class="h">S3 bucket</text>
+  <text x="892" y="331" class="mono">pragya-24bcs10032-</text>
+  <text x="892" y="346" class="mono">s19-assets</text>
+  <text x="892" y="368" class="s">• versioning enabled</text>
+  <text x="892" y="385" class="s">• SSE AES-256</text>
+  <text x="892" y="402" class="s">• public access blocked</text>
+  <text x="892" y="424" class="mono">inventory.json</text>
+  <text x="878" y="458" class="s">regional service, outside the VPC</text>
+
+  <!-- security groups -->
+  <rect x="878" y="478" width="186" height="178" rx="8" fill="#fdeeee" stroke="#c4504b" stroke-width="1.5"/>
+  <text x="892" y="499" class="h">Security groups</text>
+  <text x="892" y="521" class="t" font-weight="bold">web-sg</text>
+  <text x="892" y="538" class="s">in  80, 443 ← 0.0.0.0/0</text>
+  <text x="892" y="554" class="s">in  22 ← 203.0.113.25/32</text>
+  <text x="892" y="570" class="s">out all</text>
+  <text x="892" y="595" class="t" font-weight="bold">app-sg</text>
+  <text x="892" y="612" class="s">in  8080 ← web-sg only</text>
+  <text x="892" y="628" class="s">out all</text>
+  <text x="892" y="646" class="s">(rule source is a group, not IPs)</text>
+
+  <!-- legend -->
+  <rect x="878" y="684" width="186" height="122" rx="8" fill="#ffffff" stroke="#9aa6b5" stroke-width="1.2"/>
+  <text x="892" y="705" class="h">Legend</text>
+  <rect x="892" y="715" width="14" height="10" fill="#e9f6ec" stroke="#3f9a5a"/>
+  <text x="912" y="724" class="s">public subnet</text>
+  <rect x="892" y="733" width="14" height="10" fill="#fdf0e6" stroke="#cf7a3a"/>
+  <text x="912" y="742" class="s">private subnet</text>
+  <rect x="892" y="751" width="14" height="10" fill="#fff4e0" stroke="#d99a2b"/>
+  <text x="912" y="760" class="s">EC2 instance</text>
+  <path d="M892 777 L906 777" class="line"/>
+  <text x="912" y="781" class="s">traffic allowed</text>
+  <path d="M892 795 L906 795" class="line dash"/>
+  <text x="912" y="799" class="s">optional / egress only</text>
+</svg>
