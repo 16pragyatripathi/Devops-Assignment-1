@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: s10-strategies
+---
+# Page content for each version, so curl shows which Pod answered.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: content-v1
+  namespace: s10-strategies
+data:
+  index.html: "v1\n"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: content-v2
+  namespace: s10-strategies
+data:
+  index.html: "v2\n"

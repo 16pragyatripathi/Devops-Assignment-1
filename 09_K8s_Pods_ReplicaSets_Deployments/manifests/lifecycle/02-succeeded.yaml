@@ -1,0 +1,13 @@
+# Phase: Succeeded - every container exited 0 and will not be restarted.
+# restartPolicy: Never is what lets the Pod settle in a terminal phase.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lifecycle-succeeded
+  namespace: s10-lifecycle
+spec:
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "echo 'work finished'; exit 0"]

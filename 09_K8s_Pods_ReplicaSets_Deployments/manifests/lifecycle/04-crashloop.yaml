@@ -1,0 +1,14 @@
+# Not a phase - CrashLoopBackOff is a container WAITING reason inside a Pod
+# whose phase is still Running. restartPolicy: Always keeps restarting the
+# failing container, and the kubelet backs off exponentially between tries.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lifecycle-crashloop
+  namespace: s10-lifecycle
+spec:
+  restartPolicy: Always
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "echo 'starting'; sleep 2; exit 1"]

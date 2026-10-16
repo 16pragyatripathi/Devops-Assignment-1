@@ -282,6 +282,67 @@ kubectl delete -f manifests/01-clusterip -f manifests/02-nodeport -f manifests/0
 
 ---
 
+# Session 11 deliverables
+
+## Task 2: Kubernetes object comparison
+
+### Deployment vs ReplicaSet
+
+| | ReplicaSet | Deployment |
+|---|---|---|
+| Keeps N Pods alive | Yes | Yes, through a ReplicaSet it owns |
+| Versioned updates | **No** | Yes — a new ReplicaSet per revision |
+| Rollback | **No** | `kubectl rollout undo`, instant |
+| Update strategy | None | `RollingUpdate` or `Recreate` |
+| Revision history | None | `kubectl rollout history` |
+| Written by hand in practice | Rarely | Almost always |
+
+A ReplicaSet can only answer "are there N Pods?". Change its image and it does nothing to the Pods already running — it has no notion of a rollout. A Deployment adds exactly that layer: it creates a second ReplicaSet for the new template, shifts replicas between the two, and keeps the old one at 0 so a rollback is just shifting them back. Seen directly in session 9:
+
+```text
+$ kubectl get rs -n s10-strategies -l app=web-rolling
+NAME                     DESIRED   CURRENT   READY   AGE
+web-rolling-678b84d9db   0         0         0       13s
+web-rolling-95f475bc     4         4         4       1s
+```
+
+Two ReplicaSets, one Deployment, one of them parked at zero. That parked ReplicaSet *is* the rollback.
+
+### Deployment vs DaemonSet vs StatefulSet
+
+| | Deployment | DaemonSet | StatefulSet |
+|---|---|---|---|
+| How many Pods | Whatever `replicas` says | Exactly one per eligible node | Whatever `replicas` says |
+| Pod names | Random suffix (`web-7b84d9f7f5-bg2jl`) | Random suffix | **Ordinal and stable** (`web-0`, `web-1`) |
+| Identity across restart | Fresh name and IP | Fresh name and IP | **Same name, same DNS record** |
+| Storage | Usually shared or none | Usually host paths | **One PVC per Pod**, via `volumeClaimTemplates` |
+| Start / stop order | All at once | Per node, as nodes appear | **Ordered**: 0, then 1, then 2 |
+| Scales with | Load | Cluster size | Load, but carefully |
+| Typical use | Stateless web app, API | Log shipper, metrics exporter, CNI | Database, Kafka, anything with a replication protocol |
+
+The dividing line is whether a replica is **interchangeable**. For a stateless API any Pod can serve any request, so random names are fine and a Deployment fits. A database replica is not interchangeable — replica 0 may be the primary, each one owns its own disk, and the others find it by a fixed DNS name. That needs stable identity and per-Pod storage, which is a StatefulSet. A DaemonSet answers a different question entirely: not "how many" but "one everywhere", so its count follows the node count. Session 9 showed this — the DaemonSet skipped the control-plane node until the taint was tolerated.
+
+### ReplicaSet vs Service
+
+These are not alternatives; they solve unrelated problems and are almost always used together.
+
+| | ReplicaSet | Service |
+|---|---|---|
+| Category | Workload controller | Network abstraction |
+| Answers | "Do N Pods exist?" | "What is the stable address for these Pods?" |
+| Creates Pods | Yes | **Never** |
+| Gives a stable IP / DNS name | No | Yes |
+| Survives Pod replacement | Recreates the Pod, with a new IP | Keeps the same ClusterIP and name |
+| Finds its targets by | `spec.selector.matchLabels` (owns them) | `spec.selector` (matches them, owns nothing) |
+
+Both use label selectors, which is where they get confused, but the relationship differs. A ReplicaSet **owns** the Pods it selects — it sets `ownerReferences` and will recreate them if deleted. A Service only **matches** Pods; it takes no ownership and creates nothing. Delete a Service and every Pod keeps running, just unreachable by name. Delete a ReplicaSet and the Pods go with it.
+
+They are complementary because Pod IPs are not durable. The ReplicaSet guarantees Pods exist; the Service guarantees there is one address in front of whichever Pods currently do. The `kubectl delete pod` test in section 1 showed both halves: the controller replaced the Pod with a new IP, and the Service picked up the replacement without its own address changing.
+
+A Service with no matching Pods is not an error, just empty — the failure mode diagnosed in section 6.
+
+---
+
 ## Screenshots
 
 These screenshots were taken in a second run of the same labs, so Pod names, IPs and ages differ from the text output above.

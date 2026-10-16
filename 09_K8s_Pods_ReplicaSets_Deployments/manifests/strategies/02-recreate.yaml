@@ -1,0 +1,32 @@
+# Strategy 2: Recreate - kill every old Pod first, then start the new ones.
+# There is a deliberate gap in availability. Used when two versions must never
+# run at the same time (shared database schema, exclusive file lock).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-recreate
+  namespace: s10-strategies
+spec:
+  replicas: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: web-recreate
+  template:
+    metadata:
+      labels:
+        app: web-recreate
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: content
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: content
+          configMap:
+            name: content-v1
