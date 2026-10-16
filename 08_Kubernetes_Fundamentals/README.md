@@ -13,6 +13,8 @@ kind create cluster --config kind-cluster.yaml
 
 ---
 
+*Screenshots below come from a second run of the same labs, so Pod names, IPs and ages differ from the text output.*
+
 ## 1. Kubernetes architecture in short
 
 | Component | Runs on | Job |
@@ -59,6 +61,11 @@ local-path-storage   Active   7m45s
 
 **What I understood:** the server runs v1.37 and both nodes are `Ready`. The control-plane node hosts the API server, and the worker node runs my applications. Default namespaces: `default` (my objects), `kube-system` (cluster components), `kube-public`, `kube-node-lease` (node heartbeats).
 
+**Cluster info, nodes and namespaces**
+
+![k8-01-cluster](screenshots/k8-01-cluster.png)
+
+
 ## 3. The architecture components are real Pods
 
 ```text
@@ -77,6 +84,11 @@ kube-scheduler-devops-hw-control-plane            1/1     Running   0          7
 ```
 
 **What I understood:** every component from the table above is visible here: `etcd`, `kube-apiserver`, `kube-controller-manager`, `kube-scheduler` on the control-plane node, and one `kube-proxy` plus one `kindnet` (the CNI network plugin) **per node**. `coredns` runs with 2 replicas.
+
+**Control-plane components running as Pods in `kube-system`**
+
+![k8-02-kube-system](screenshots/k8-02-kube-system.png)
+
 
 ## 4. Node capacity and API resources
 
@@ -153,6 +165,11 @@ $ kubectl logs hello-nginx | tail -3
 
 **What I understood:** the `Events` section shows the life of a Pod step by step: **Scheduled** (scheduler picked `devops-hw-worker`) → **Pulling / Pulled** (kubelet asked containerd for the image) → **Created** → **Started**. The Pod got its own IP `10.244.1.2` from the Pod network. `kubectl exec` runs a command inside the container and `kubectl logs` shows its stdout.
 
+**First Pod: run, wait, inspect events, exec**
+
+![k8-03-first-pod](screenshots/k8-03-first-pod.png)
+
+
 ## 6. Namespaces
 
 ```text
@@ -169,6 +186,11 @@ dev                  hello-dev                                         0/1     C
 ```
 
 **What I understood:** namespaces are virtual clusters inside one cluster, used to separate teams or environments. `-n dev` targets a namespace and `-A` lists all of them. Two Pods with the same name can exist if they are in different namespaces.
+
+**Namespaces**
+
+![k8-04-namespaces](screenshots/k8-04-namespaces.png)
+
 
 ## 7. Generating YAML and reading documentation from the CLI
 
@@ -231,26 +253,3 @@ Deleting a namespace deletes everything inside it.
 | `kubectl run` / `kubectl create` | Quick imperative creation |
 | `kubectl explain <type.field>` | Field documentation |
 | `kubectl config get-contexts` | Which cluster am I talking to |
-
----
-
-## Screenshots
-
-These screenshots were taken in a second run of the same labs, so Pod names, IPs and ages differ from the text output above.
-
-**Cluster info, nodes and namespaces**
-
-![k8-01-cluster](screenshots/k8-01-cluster.png)
-
-**Control-plane components running as Pods in `kube-system`**
-
-![k8-02-kube-system](screenshots/k8-02-kube-system.png)
-
-**First Pod: run, wait, inspect events, exec**
-
-![k8-03-first-pod](screenshots/k8-03-first-pod.png)
-
-**Namespaces**
-
-![k8-04-namespaces](screenshots/k8-04-namespaces.png)
-

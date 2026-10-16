@@ -5,6 +5,8 @@
 
 Manifests are from the class repository ([session-11-kubernetes-services](https://github.com/Nency-Ravaliya/devops-heros/tree/main/session-11-kubernetes-services)) and are copied into [manifests/](manifests). I ran all five service types on my local 2-node kind cluster. All outputs are copied from my terminal.
 
+*Screenshots below come from a second run of the same labs, so Pod names, IPs and ages differ from the text output.*
+
 ## Why Services exist
 
 Pods are temporary. Every time a Pod is re-created it gets a **new IP**, so nothing can depend on a Pod IP. A Service gives a **stable name and virtual IP** in front of all Pods that match its label selector, and load balances between them.
@@ -101,6 +103,15 @@ HTTP 200
 
 I deleted the Pod with IP `10.244.1.35`. The Deployment created a new Pod (`10.244.1.38`), and the EndpointSlice was updated **automatically**. The client kept using the same name and still got `HTTP 200`. This is exactly the problem Services solve.
 
+**ClusterIP Service and its EndpointSlice**
+
+![k10-01-clusterip](screenshots/k10-01-clusterip.png)
+
+**Access by service name and FQDN, CoreDNS lookup, `resolv.conf`**
+
+![k10-02-clusterip-dns](screenshots/k10-02-clusterip-dns.png)
+
+
 ## 2. NodePort
 
 [manifests/02-nodeport](manifests/02-nodeport): `port: 80`, `targetPort: 80`, `nodePort: 30080`.
@@ -141,6 +152,11 @@ $ docker exec devops-hw-worker curl -s -m 5 http://localhost:30080 | grep "<titl
 - `80:30080/TCP` means port 30080 is open on **every node**. Both node IPs answered, including the control-plane node where no application Pod is running. `kube-proxy` forwards the traffic to a matching Pod wherever it is.
 - A NodePort Service still has a ClusterIP. Each type builds on the previous one: LoadBalancer ⊃ NodePort ⊃ ClusterIP.
 - kind nodes are Docker containers, so their IPs (`172.18.0.x`) are reachable only from inside the Docker network. That is why I ran `curl` from inside the node containers. With Minikube the equivalent is `curl $(minikube ip):30080` or `minikube service web-service-nodeport --url`.
+
+**NodePort 30080 answering on the nodes**
+
+![k10-03-nodeport](screenshots/k10-03-nodeport.png)
+
 
 ## 3. LoadBalancer
 
@@ -194,6 +210,11 @@ external-database-service.default.svc.cluster.local	canonical name = nencyravali
 ```
 
 **What I understood:** there is no ClusterIP, no selector and no Pods. CoreDNS simply answers with a `CNAME` (`canonical name = nencyravaliya.me`). The application can use the in-cluster name `external-database-service`, and if the external database moves, only the Service is edited and not the application.
+
+**LoadBalancer stays `<pending>` locally, ExternalName returns a CNAME**
+
+![k10-04-loadbalancer-externalname](screenshots/k10-04-loadbalancer-externalname.png)
+
 
 ## 5. Headless Service + StatefulSet
 
@@ -249,6 +270,11 @@ HTTP 200 from pod web-stateful-0
 - StatefulSet Pods have **stable names** (`web-stateful-0`, `-1`, `-2`), and each one gets its own DNS record: `<pod>.<service>.<namespace>.svc.cluster.local`. `web-stateful-1` resolved to exactly its own IP `10.244.1.47`.
 - Databases and clustered systems (MySQL replication, Kafka, MongoDB) need this, because a replica must talk to one specific peer, not to a random one.
 
+**Headless Service: DNS returns Pod IPs, per-Pod DNS for the StatefulSet**
+
+![k10-05-headless](screenshots/k10-05-headless.png)
+
+
 ## 6. Troubleshooting – empty endpoints
 
 [manifests/empty-endpoints.yaml](manifests/empty-endpoints.yaml) has the selector `app: wrong-backend-name`, which matches no Pod.
@@ -272,6 +298,11 @@ endpointslice.discovery.k8s.io/broken-backend-service-qxkhx     IPv4          <u
 3. Does `targetPort` match the port the container really listens on?
 4. Are the Pods `Ready`? Pods that are not ready are removed from the endpoints.
 5. Is CoreDNS running: `kubectl get pods -n kube-system -l k8s-app=kube-dns`
+
+**Troubleshooting: selector mismatch gives empty endpoints**
+
+![k10-06-empty-endpoints](screenshots/k10-06-empty-endpoints.png)
+
 
 ## Clean up
 
@@ -340,34 +371,3 @@ Both use label selectors, which is where they get confused, but the relationship
 They are complementary because Pod IPs are not durable. The ReplicaSet guarantees Pods exist; the Service guarantees there is one address in front of whichever Pods currently do. The `kubectl delete pod` test in section 1 showed both halves: the controller replaced the Pod with a new IP, and the Service picked up the replacement without its own address changing.
 
 A Service with no matching Pods is not an error, just empty — the failure mode diagnosed in section 6.
-
----
-
-## Screenshots
-
-These screenshots were taken in a second run of the same labs, so Pod names, IPs and ages differ from the text output above.
-
-**ClusterIP Service and its EndpointSlice**
-
-![k10-01-clusterip](screenshots/k10-01-clusterip.png)
-
-**Access by service name and FQDN, CoreDNS lookup, `resolv.conf`**
-
-![k10-02-clusterip-dns](screenshots/k10-02-clusterip-dns.png)
-
-**NodePort 30080 answering on the nodes**
-
-![k10-03-nodeport](screenshots/k10-03-nodeport.png)
-
-**LoadBalancer stays `<pending>` locally, ExternalName returns a CNAME**
-
-![k10-04-loadbalancer-externalname](screenshots/k10-04-loadbalancer-externalname.png)
-
-**Headless Service: DNS returns Pod IPs, per-Pod DNS for the StatefulSet**
-
-![k10-05-headless](screenshots/k10-05-headless.png)
-
-**Troubleshooting: selector mismatch gives empty endpoints**
-
-![k10-06-empty-endpoints](screenshots/k10-06-empty-endpoints.png)
-

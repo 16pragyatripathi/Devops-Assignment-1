@@ -30,6 +30,8 @@ What gets built:
 
 ---
 
+*Screenshots below come from a second run of the same labs, so Pod names, IPs and ages differ from the text output.*
+
 ## 0. Install the Ingress controller
 
 The class demo uses `minikube addons enable ingress`. On kind the same NGINX controller is installed from its official manifest. My kind cluster maps the node's port 80 to `localhost:8081` on my laptop (see [kind-cluster.yaml](../08_Kubernetes_Fundamentals/kind-cluster.yaml)).
@@ -110,6 +112,11 @@ $ kubectl get configmap cli-config -o jsonpath="{.data}"; echo
 
 **What I understood:** a ConfigMap is plain text and can be created from YAML or directly from the CLI (`--from-literal`, `--from-file`). The same image can run in dev and production with different ConfigMaps, so configuration changes do not need an image rebuild.
 
+**Ingress controller running, ConfigMap applied**
+
+![k11-01-ingress-controller-configmap](screenshots/k11-01-ingress-controller-configmap.png)
+
+
 ## 2. Secret
 
 [manifests/secret.yaml](manifests/secret.yaml)
@@ -149,6 +156,11 @@ eWF0cmlfYWRtaW4K
 - `kubectl describe secret` shows only the **size** of each value, never the value.
 - Values under `data:` are **base64-encoded, not encrypted**. Anyone who can read the Secret can decode it with `base64 --decode`. Real protection comes from RBAC, encryption at rest for etcd, and keeping Secret YAML out of Git (or using Sealed Secrets / an external vault).
 - **The base64 gotcha:** `echo -n "yatri_admin" | base64` gives `eWF0cmlfYWRtaW4=`, but without `-n` the result is `eWF0cmlfYWRtaW4K`. The trailing `K` is an encoded newline. That hidden newline ends up inside the password and causes login failures that are very hard to spot. Always use `echo -n`, or use `stringData:` and let Kubernetes do the encoding.
+
+**Secret: describe hides values, base64 decode, and the `echo -n` gotcha**
+
+![k11-02-secret](screenshots/k11-02-secret.png)
+
 
 ## 3. Deploy the applications and inject the configuration
 
@@ -201,6 +213,11 @@ POSTGRES_USER=yatri_admin
 ```
 
 **What I understood:** inside the container the ConfigMap keys and the **decoded** Secret values are ordinary environment variables. The application does not need to know Kubernetes exists. Environment variables are read only at start-up, so after changing a ConfigMap the Pods need `kubectl rollout restart deployment/<name>`. ConfigMaps mounted as volumes are refreshed automatically.
+
+**Apps deployed, ConfigMap and Secret values visible as environment variables**
+
+![k11-03-apps-env](screenshots/k11-03-apps-env.png)
+
 
 ## 4. Ingress
 
@@ -261,31 +278,6 @@ HTTP 404
 - `ingressClassName: nginx` selects which controller handles the Ingress. An Ingress object without a running controller does nothing.
 - Compared to one LoadBalancer per Service, Ingress needs a single external IP and adds path/host routing and TLS termination in one place.
 
-## 5. Clean up
-
-```bash
-kubectl delete -f manifests/
-kubectl delete configmap cli-config
-```
-
----
-
-## Screenshots
-
-These screenshots were taken in a second run of the same labs, so Pod names, IPs and ages differ from the text output above.
-
-**Ingress controller running, ConfigMap applied**
-
-![k11-01-ingress-controller-configmap](screenshots/k11-01-ingress-controller-configmap.png)
-
-**Secret: describe hides values, base64 decode, and the `echo -n` gotcha**
-
-![k11-02-secret](screenshots/k11-02-secret.png)
-
-**Apps deployed, ConfigMap and Secret values visible as environment variables**
-
-![k11-03-apps-env](screenshots/k11-03-apps-env.png)
-
 **Ingress routing: `/` → frontend, `/api/` → backend, unknown host → 404**
 
 ![k11-04-ingress](screenshots/k11-04-ingress.png)
@@ -298,3 +290,10 @@ These screenshots were taken in a second run of the same labs, so Pod names, IPs
 
 ![k11-06-browser-api](screenshots/k11-06-browser-api.png)
 
+
+## 5. Clean up
+
+```bash
+kubectl delete -f manifests/
+kubectl delete configmap cli-config
+```

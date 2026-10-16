@@ -14,6 +14,8 @@ Manifests are from the class repository ([session10-k8s-core-objects](https://gi
 
 ---
 
+*Screenshots below come from a second run of the same labs, so Pod names, IPs and ages differ from the text output.*
+
 ## 1. Pod
 
 [manifests/nginx-pod.yaml](manifests/nginx-pod.yaml)
@@ -37,6 +39,11 @@ No resources found in default namespace.
 ```
 
 **What I understood:** a bare Pod is not protected. After `kubectl delete pod` there were **no resources** left, nobody re-created it. That is why Pods are almost never created directly in production.
+
+**Bare Pod: created, deleted, not re-created**
+
+![k9-01-pod](screenshots/k9-01-pod.png)
+
 
 ## 2. ReplicaSet – self-healing and scaling
 
@@ -98,6 +105,11 @@ replicaset.apps "yatri-backend-rs" deleted from default namespace
 - The ReplicaSet finds its Pods only through the **label selector**, and Pod names get a random suffix.
 - `kubectl scale --replicas=5` created 2 more Pods. The `Events` list shows every `SuccessfulCreate`.
 - A ReplicaSet cannot do a controlled image update. That is the job of a Deployment.
+
+**ReplicaSet: self-healing after a Pod delete, then scaling to 5**
+
+![k9-02-replicaset](screenshots/k9-02-replicaset.png)
+
 
 ## 3. Deployment – rolling update, history, rollback
 
@@ -198,6 +210,15 @@ yatri-backend   5/5     5            5           4s
 - After the undo, revision 1 became revision 3 in `rollout history`. A rollback is recorded as a new revision.
 - The `kubernetes.io/change-cause` annotation fills the `CHANGE-CAUSE` column, which is useful to know why a release was made.
 
+**Deployment v1: Deployment → ReplicaSet → Pods**
+
+![k9-03-deployment-v1](screenshots/k9-03-deployment-v1.png)
+
+**Rolling update to v2, history, and rollback**
+
+![k9-04-rolling-update-rollback](screenshots/k9-04-rolling-update-rollback.png)
+
+
 ## 4. Troubleshooting – a broken image
 
 I pushed a wrong image tag on purpose, the same error as in `troubleshooting/broken-image.yaml`.
@@ -244,6 +265,11 @@ deployment.apps "yatri-backend" deleted from default namespace
 
 Debugging order: `kubectl get pods` → `kubectl describe pod` (Events) → `kubectl logs` (add `--previous` for `CrashLoopBackOff`).
 
+**Broken image: `ImagePullBackOff` while the old Pods keep running, then rollback**
+
+![k9-05-broken-image](screenshots/k9-05-broken-image.png)
+
+
 ## 5. DaemonSet
 
 [manifests/node-agent-ds.yaml](manifests/node-agent-ds.yaml)
@@ -274,6 +300,11 @@ daemonset.apps "node-logging-agent" deleted from default namespace
 **What I understood:** there is no `replicas` field. The number of Pods follows the number of nodes. `DESIRED` is 1 on my 2-node cluster because the control-plane node has a `NoSchedule` taint and this DaemonSet has no toleration for it, so only the worker node is eligible. Typical uses are log collectors, monitoring agents and network plugins. `kube-proxy` and `kindnet` are DaemonSets themselves.
 
 ---
+
+**DaemonSet and the control-plane taint**
+
+![k9-06-daemonset](screenshots/k9-06-daemonset.png)
+
 
 ## Pod status cheat sheet
 
@@ -549,34 +580,3 @@ Polling for this state took about 100 seconds of attempts, because the back-off 
 ```bash
 kubectl delete namespace s10-strategies s10-lifecycle
 ```
-
----
-
-## Screenshots
-
-These screenshots were taken in a second run of the same labs, so Pod names, IPs and ages differ from the text output above.
-
-**Bare Pod: created, deleted, not re-created**
-
-![k9-01-pod](screenshots/k9-01-pod.png)
-
-**ReplicaSet: self-healing after a Pod delete, then scaling to 5**
-
-![k9-02-replicaset](screenshots/k9-02-replicaset.png)
-
-**Deployment v1: Deployment → ReplicaSet → Pods**
-
-![k9-03-deployment-v1](screenshots/k9-03-deployment-v1.png)
-
-**Rolling update to v2, history, and rollback**
-
-![k9-04-rolling-update-rollback](screenshots/k9-04-rolling-update-rollback.png)
-
-**Broken image: `ImagePullBackOff` while the old Pods keep running, then rollback**
-
-![k9-05-broken-image](screenshots/k9-05-broken-image.png)
-
-**DaemonSet and the control-plane taint**
-
-![k9-06-daemonset](screenshots/k9-06-daemonset.png)
-
