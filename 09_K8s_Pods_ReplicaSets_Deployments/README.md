@@ -576,6 +576,64 @@ The `STATUS` column says `CrashLoopBackOff` but the **phase is `Running`**. Cras
 
 Polling for this state took about 100 seconds of attempts, because the back-off grows (10s, 20s, 40s, 80s, up to 5 minutes) and between timers the container is briefly `terminated` instead. `kubectl logs --previous` is the tool for reading why the last attempt died.
 
+### Lifecycle hooks and graceful shutdown
+
+Manifest: [manifests/lifecycle/05-hooks.yaml](manifests/lifecycle/05-hooks.yaml). Two hooks, both writing to a shared `emptyDir` so the order is visible.
+
+```yaml
+lifecycle:
+  postStart:
+    exec: {command: ["sh","-c","echo \"$(date +%T) postStart hook ran\" >> /trace/log"]}
+  preStop:
+    exec: {command: ["sh","-c","echo \"$(date +%T) preStop hook ran\" >> /trace/log; sleep 5"]}
+```
+
+`postStart` fires as soon as the container starts:
+
+```text
+$ kubectl exec lifecycle-hooks -n s10-lifecycle -- cat /trace/log
+19:38:23 main container started
+19:38:23 postStart hook ran
+```
+
+Both at the same second — `postStart` runs *concurrently* with the entrypoint, not before it. There is no ordering guarantee between them, which is why `postStart` is a poor place for initialisation that the app depends on. An init container is the right tool for that, because it has to finish before the main container starts at all.
+
+`preStop` is the interesting one. Measuring the delete, with a container that handles SIGTERM properly:
+
+```text
+$ kubectl delete pod trap-nohook -n s10-lifecycle   # traps SIGTERM, no preStop
+pod "trap-nohook" deleted
+elapsed: 1s
+
+$ kubectl delete pod trap-prestop -n s10-lifecycle   # identical, plus preStop: sleep 5
+pod "trap-prestop" deleted
+elapsed: 6s
+```
+
+One second versus six. The `preStop` hook runs to completion **before** the kubelet sends SIGTERM, and its duration comes out of the termination grace period. That five-second window is the whole point: it is where a real service stops accepting new connections and lets in-flight requests finish, while the endpoint controller removes it from Service endpoints in parallel.
+
+#### The mistake that taught me the most
+
+My first attempt compared the hook pod against a plain `sleep 3600` pod and both took **31 seconds**:
+
+```text
+$ kubectl delete pod lifecycle-hooks -n s10-lifecycle
+elapsed: 31s
+
+$ kubectl delete pod no-hooks -n s10-lifecycle   # no hooks at all
+elapsed: 31s
+```
+
+The preStop hook was not the cause. `sh -c "sleep 3600"` does not install a signal handler, so SIGTERM is ignored, the kubelet waits out the full `terminationGracePeriodSeconds: 30`, and then SIGKILLs. Both pods hit the ceiling for the same reason and the hook's 5 seconds were invisible inside it.
+
+Adding `trap 'exit 0' TERM` to the command is what made the difference measurable. The lesson generalises: **a graceful shutdown needs the process to handle SIGTERM.** A `preStop` hook cannot rescue an app that ignores it — the pod just takes the full grace period and dies hard every time. In a real image this means not burying the app under a shell, or using `exec` so it becomes PID 1 and receives signals directly.
+
+| | Runs when | Blocks what | Good for |
+|---|---|---|---|
+| `postStart` | Right after container start, concurrently with the entrypoint | Container is not `Ready` until it finishes | Registering with something external; **not** initialisation the app needs |
+| `preStop` | Before SIGTERM, on delete or eviction | Deducted from `terminationGracePeriodSeconds` | Draining connections, deregistering from a load balancer |
+| init container | Before the main container starts | The whole Pod | Waiting for a database, running migrations |
+
 ### Phase vs container reason
 
 | What you see | What it is | Where it lives |

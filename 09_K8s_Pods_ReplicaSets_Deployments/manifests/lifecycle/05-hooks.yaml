@@ -1,0 +1,27 @@
+# postStart runs just after the container starts; preStop runs just before the
+# kubelet sends SIGTERM. Both write to a shared file so the order is visible.
+# terminationGracePeriodSeconds is the budget for preStop + SIGTERM + exit.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lifecycle-hooks
+  namespace: s10-lifecycle
+spec:
+  terminationGracePeriodSeconds: 30
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "echo \"$(date +%T) main container started\" >> /trace/log; sleep 3600"]
+      lifecycle:
+        postStart:
+          exec:
+            command: ["sh", "-c", "echo \"$(date +%T) postStart hook ran\" >> /trace/log"]
+        preStop:
+          exec:
+            command: ["sh", "-c", "echo \"$(date +%T) preStop hook ran, draining for 5s\" >> /trace/log; sleep 5"]
+      volumeMounts:
+        - name: trace
+          mountPath: /trace
+  volumes:
+    - name: trace
+      emptyDir: {}

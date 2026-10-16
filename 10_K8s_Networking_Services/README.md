@@ -304,6 +304,28 @@ endpointslice.discovery.k8s.io/broken-backend-service-qxkhx     IPv4          <u
 ![k10-06-empty-endpoints](screenshots/k10-06-empty-endpoints.png)
 
 
+## Service type summary
+
+All five, side by side, after running each one above.
+
+| Type | Gets a ClusterIP | Reachable from | How a client finds it | What it does under the hood |
+|---|---|---|---|---|
+| **ClusterIP** (default) | Yes | Inside the cluster only | `svc-name` or `svc.ns.svc.cluster.local` | kube-proxy rules load-balance the virtual IP across ready endpoints |
+| **NodePort** | Yes | Any node's IP on a port in 30000–32767 | `<node-ip>:<nodeport>` | Everything ClusterIP does, plus every node listens on that port and forwards |
+| **LoadBalancer** | Yes | Outside the cluster, via a cloud LB | The external IP | Everything NodePort does, plus asks the cloud provider for an LB. Stays `<pending>` on kind — there is no provider to answer |
+| **ExternalName** | **No** | Inside the cluster | `svc-name` resolves to a CNAME | Pure DNS. No proxying, no endpoints, no kube-proxy involvement |
+| **Headless** (`clusterIP: None`) | **No** | Inside the cluster | `svc-name` returns **every** Pod IP; `pod-0.svc` addresses one | DNS returns A records for each ready Pod. The client picks, not kube-proxy |
+
+Each of the first three builds on the one before it — a LoadBalancer is a NodePort is a ClusterIP, with another layer added. The last two are the odd ones out: neither allocates a virtual IP, and neither load-balances. ExternalName is a DNS alias pointing out of the cluster; headless points at individual Pods inside it.
+
+Choosing between them:
+
+- **ClusterIP** for anything only other Pods talk to. This is most Services.
+- **NodePort** for a quick external check in a local cluster. Awkward in production — high port numbers, and the client must know a node IP.
+- **LoadBalancer** for real external traffic on a cloud provider, remembering each one is a separately billed resource. In practice you provision one for an Ingress controller and route everything through it.
+- **ExternalName** to give an outside dependency a stable in-cluster name, so moving it later is a Service edit rather than a change in every app.
+- **Headless** when the client needs to address specific Pods — StatefulSets, database replicas, anything doing its own peer discovery.
+
 ## Clean up
 
 ```bash
