@@ -496,6 +496,15 @@ $ for i in $(seq 1 20); do kubectl exec client -n s10-strategies -- wget -qO- we
 
 1 canary Pod out of 5 predicts 20% of requests; 20 requests gave **5 to v2 (25%)**. kube-proxy picks a backend at random per connection, so small samples scatter around the ratio rather than hitting it exactly. The lever is the replica count — 1 in 5, then 2 in 5, and so on. Getting a precise percentage regardless of replica count needs an ingress controller or a service mesh that can weight routes.
 
+One trap worth recording: `kubectl port-forward svc/web-canary 8089:80` is **not** a valid way to check the split. Forwarding to a Service resolves its endpoints once and pins the tunnel to a single Pod, so every request goes to the same backend — mine landed on the canary and returned `v2` five times in a row, which looks like a 100% rollout.
+
+```text
+$ for i in 1 2 3 4 5; do curl -s http://localhost:8089; done
+v2 v2 v2 v2 v2
+```
+
+The traffic split only appears through the Service's ClusterIP, which is why the test above runs `wget` from a Pod inside the cluster rather than from my laptop.
+
 ---
 
 ## Task 2: Pod lifecycle
