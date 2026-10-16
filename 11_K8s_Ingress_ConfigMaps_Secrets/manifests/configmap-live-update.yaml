@@ -1,0 +1,39 @@
+# Demonstrates the difference between the two ways of consuming a ConfigMap.
+# The SAME ConfigMap is wired in twice: once as environment variables and once
+# as a mounted volume. Updating the ConfigMap updates only one of them.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: s12-configmap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: live-config
+  namespace: s12-configmap
+data:
+  GREETING: "hello from v1"
+  LOG_LEVEL: "INFO"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: config-consumer
+  namespace: s12-configmap
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep 3600"]
+      # Path 1: baked into the process environment at container start.
+      envFrom:
+        - configMapRef:
+            name: live-config
+      # Path 2: projected as files, kept in sync by the kubelet.
+      volumeMounts:
+        - name: config
+          mountPath: /etc/live-config
+  volumes:
+    - name: config
+      configMap:
+        name: live-config

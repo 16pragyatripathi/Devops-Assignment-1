@@ -117,6 +117,82 @@ $ kubectl get configmap cli-config -o jsonpath="{.data}"; echo
 ![k11-01-ingress-controller-configmap](screenshots/k11-01-ingress-controller-configmap.png)
 
 
+### Live updates: volumes refresh, environment variables do not
+
+A ConfigMap can be consumed two ways, and they behave differently when the ConfigMap changes. [manifests/configmap-live-update.yaml](manifests/configmap-live-update.yaml) wires the **same** ConfigMap in both ways at once, in namespace `s12-configmap`, so the two can be compared directly.
+
+```yaml
+envFrom:                      # path 1: environment variables
+  - configMapRef:
+      name: live-config
+volumeMounts:                 # path 2: files
+  - name: config
+    mountPath: /etc/live-config
+```
+
+Before any change, both agree:
+
+```text
+$ kubectl exec config-consumer -n s12-configmap -- env | grep -E 'GREETING|LOG_LEVEL'
+GREETING=hello from v1
+LOG_LEVEL=INFO
+
+$ kubectl exec config-consumer -n s12-configmap -- cat /etc/live-config/GREETING
+hello from v1
+
+$ kubectl exec config-consumer -n s12-configmap -- ls -l /etc/live-config
+total 0
+lrwxrwxrwx    1 root     root            15 Oct 16 19:09 GREETING -> ..data/GREETING
+lrwxrwxrwx    1 root     root            16 Oct 16 19:09 LOG_LEVEL -> ..data/LOG_LEVEL
+```
+
+Those are **symlinks**, not plain files — that detail matters in a moment. Now change the ConfigMap:
+
+```text
+$ kubectl patch configmap live-config -n s12-configmap -p '{"data":{"GREETING":"hello from v2","LOG_LEVEL":"DEBUG"}}'
+configmap/live-config patched
+
+$ kubectl get configmap live-config -n s12-configmap -o jsonpath='{.data}'
+{"GREETING":"hello from v2","LOG_LEVEL":"DEBUG"}
+```
+
+After waiting for the kubelet to sync — **81 seconds** on this cluster:
+
+```text
+$ kubectl exec config-consumer -n s12-configmap -- cat /etc/live-config/GREETING   # the VOLUME
+hello from v2
+
+$ kubectl exec config-consumer -n s12-configmap -- env | grep -E 'GREETING|LOG_LEVEL'   # the ENV VARS
+GREETING=hello from v1
+LOG_LEVEL=INFO
+
+$ kubectl get pod config-consumer -n s12-configmap
+NAME              READY   STATUS    RESTARTS   AGE
+config-consumer   1/1     Running   0          104s
+```
+
+**The file says v2. The environment still says v1.** Same ConfigMap, same Pod, no restart (`RESTARTS 0`).
+
+The reason is *when* each is read. Environment variables are handed to the process once, at exec time — after that they live in the process's memory and nothing can change them from outside. The volume is maintained by the kubelet, which rewrites the `..data` directory and atomically re-points the symlinks, so the next `read()` sees new bytes.
+
+Recreating the Pod is what picks up the new environment:
+
+```text
+$ kubectl delete pod config-consumer -n s12-configmap && kubectl apply -f ...
+pod "config-consumer" deleted
+pod/config-consumer created
+
+$ kubectl exec config-consumer -n s12-configmap -- env | grep -E 'GREETING|LOG_LEVEL'
+GREETING=hello from v2
+LOG_LEVEL=DEBUG
+```
+
+Two things I took from this:
+
+- The ~60-second default sync (81s measured here) means a volume-mounted config is eventually consistent, not instant. An app that must react immediately has to watch the file, not read it once at startup.
+- For a Deployment the real fix is `kubectl rollout restart deployment/<name>`, which recreates the Pods and therefore re-reads the environment. A common production trick is putting a hash of the ConfigMap in a Pod template annotation, so changing the config changes the template and triggers a rollout automatically.
+- A mistake I made while testing: re-running `kubectl apply -f` on the manifest **reverted** the ConfigMap to v1, because the file still said v1. `patch` and `apply` fight each other when the manifest is the source of truth.
+
 ## 2. Secret
 
 [manifests/secret.yaml](manifests/secret.yaml)
@@ -161,6 +237,50 @@ eWF0cmlfYWRtaW4K
 
 ![k11-02-secret](screenshots/k11-02-secret.png)
 
+
+### What a Secret actually gives you, and what it does not
+
+`kubectl describe` on a Secret hides the value, which is easy to mistake for protection:
+
+```text
+$ kubectl describe secret demo-secret -n s12-configmap
+Name:         demo-secret
+Namespace:    s12-configmap
+Type:  Opaque
+
+Data
+====
+API_KEY:  20 bytes
+```
+
+It reports the *length* and nothing else. But `describe` is the only thing being coy:
+
+```text
+$ kubectl get secret demo-secret -n s12-configmap -o jsonpath='{.data.API_KEY}'
+bm90LWEtcmVhbC1rZXktMTIzNDU=
+
+$ kubectl get secret demo-secret -n s12-configmap -o jsonpath='{.data.API_KEY}' | base64 -d
+not-a-real-key-12345
+```
+
+One extra command and the value is in plain text. **base64 is an encoding, not encryption** — it exists so binary data can live in YAML, and it stops nothing. Anyone who can read the Secret can read its contents:
+
+```text
+$ kubectl auth can-i get secrets -n s12-configmap
+yes
+```
+
+So what does a Secret actually buy over a ConfigMap?
+
+| | What it does | What it does not do |
+|---|---|---|
+| Value in `describe` / logs | Kept out of casual output | — |
+| RBAC | Can be granted separately from ConfigMaps, so `get secrets` is its own permission | Nothing, if the role already allows it |
+| Node exposure | Only sent to nodes running a Pod that uses it, and held in tmpfs rather than on disk | — |
+| At rest in etcd | — | **Not encrypted by default.** Needs an `EncryptionConfiguration` on the API server |
+| In a Git repo | — | **Nothing.** A committed Secret is a published Secret |
+
+The honest summary: a Secret is a *typed container with its own RBAC surface*, not a vault. It is better than a ConfigMap for credentials because access can be restricted independently and the value stays out of incidental output. It is not a substitute for encryption at rest, and committing one to a repo — as this homework does with `yatri-db-secret`, deliberately, since the values are throwaway — leaks it completely. Real deployments keep the value in an external store (Vault, AWS Secrets Manager, Sealed Secrets) and let the cluster pull it in.
 
 ## 3. Deploy the applications and inject the configuration
 
@@ -296,4 +416,5 @@ HTTP 404
 ```bash
 kubectl delete -f manifests/
 kubectl delete configmap cli-config
+kubectl delete namespace s12-configmap
 ```

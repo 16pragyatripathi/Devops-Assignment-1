@@ -90,6 +90,50 @@ kube-scheduler-devops-hw-control-plane            1/1     Running   0          7
 ![k8-02-kube-system](screenshots/k8-02-kube-system.png)
 
 
+### How the control plane itself starts: static Pods
+
+That listing raises a chicken-and-egg question. `kube-apiserver` is a Pod, but Pods are created *through* the API server. So who starts it?
+
+The answer is **static Pods** — manifests on disk that the kubelet reads directly, with no API server involved.
+
+```text
+$ docker exec devops-hw-control-plane ls /etc/kubernetes/manifests
+etcd.yaml
+kube-apiserver.yaml
+kube-controller-manager.yaml
+kube-scheduler.yaml
+
+$ docker exec devops-hw-worker ls /etc/kubernetes/manifests
+```
+
+Four manifests on the control-plane node, and the worker's directory is **empty**. The kubelet watches that folder and starts whatever it finds, which is how the four control-plane components come up before anything else exists. Once the API server is live, the kubelet registers mirror Pods for them so they show up in `kubectl get pods` — that is why their names are suffixed with the node name (`etcd-devops-hw-control-plane`) rather than a random hash like a Deployment's Pods.
+
+The practical consequence: `kubectl delete pod kube-apiserver-devops-hw-control-plane` does not remove it. The mirror Pod disappears and the kubelet immediately recreates it from the file on disk. Editing the YAML in that directory is how you actually change an API server flag.
+
+On the worker there is no such directory content, and the node's own agents run as ordinary processes rather than Pods:
+
+```text
+$ docker exec devops-hw-worker ps -eo comm --no-headers | sort -u | grep -E 'kubelet|kube-proxy|containerd'
+containerd
+containerd-shim
+kube-proxy
+kubelet
+```
+
+`kubelet` and `containerd` are host processes — they have to be, because they are what runs Pods. `kube-proxy` appears both here and as a Pod because it is deployed as a DaemonSet; the process listed is the one inside that Pod's container.
+
+### Control plane vs worker, in one line each
+
+| | Control plane | Worker |
+|---|---|---|
+| Decides | **what should happen** — scheduling, reconciliation, admission | nothing; it takes orders |
+| Runs | `etcd`, `kube-apiserver`, `kube-scheduler`, `kube-controller-manager` as static Pods | `kubelet` and `containerd` as processes |
+| Also runs | `kubelet`, `kube-proxy`, CNI — it is still a node | `kube-proxy` and CNI via DaemonSets |
+| Hosts user Pods | Not by default, a taint prevents it | Yes, this is its job |
+| Lose it and | the cluster cannot accept changes; running Pods keep running | its Pods are rescheduled elsewhere |
+
+The last row is the one worth remembering: the control plane going down does not stop traffic. The kubelets keep the existing Pods alive and `kube-proxy` keeps routing. What stops is *change* — no new Pods, no rescheduling, no `kubectl`.
+
 ## 4. Node capacity and API resources
 
 ```text

@@ -143,6 +143,66 @@ performance_schema
 sys
 ```
 
+### The default bridge behaves differently
+
+Everything above runs on **user-defined** networks. The `bridge` network Docker gives a container when you pass no `--network` at all is not the same thing, and the difference is name resolution.
+
+```text
+$ docker run -d --name dflt-a nginx:alpine   # no --network, so the default bridge
+345d78fe98090ac05be572829af8a0e937eb4d41c8226c0014f77c4d5e57067e
+
+$ docker run -d --name dflt-b nginx:alpine
+f9e832eca18e1083fe9d99d616a9b720ea84dbc88c5ea5ff4fed531d34844cde
+
+$ docker inspect -f '{{.Name}} {{.HostConfig.NetworkMode}} {{range $k,$v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}}{{end}}' dflt-a dflt-b
+/dflt-a bridge bridge=172.17.0.2
+/dflt-b bridge bridge=172.17.0.3
+
+$ docker exec dflt-a ping -c 2 -W 2 dflt-b   # by NAME
+ping: bad address 'dflt-b'
+exit status: 1
+
+$ docker exec dflt-a ping -c 2 172.17.0.3   # same pair, by IP
+PING 172.17.0.3 (172.17.0.3): 56 data bytes
+64 bytes from 172.17.0.3: seq=0 ttl=64 time=0.192 ms
+64 bytes from 172.17.0.3: seq=1 ttl=64 time=0.170 ms
+
+--- 172.17.0.3 ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+```
+
+The two containers are on the same subnet and reach each other **by IP**, but the name does not resolve. On a user-defined network the identical test works:
+
+```text
+$ docker network create demo-udn
+d3d3f13f5064108d8ffb3bf3d34f27073e8218b5de89a1cffeaff61151ce02f5
+
+$ docker run -d --name udn-a --network demo-udn nginx:alpine && docker run -d --name udn-b --network demo-udn nginx:alpine
+23a1c042cc0884701263a2cd704ab66250b7b17299d40fe3776bd95b6ec73c28
+fddd092b02ce1956ea39001a4d16e61d8e05c85c6b23f6887786c550b970cbd5
+
+$ docker exec udn-a ping -c 2 udn-b   # by NAME
+PING udn-b (172.20.0.3): 56 data bytes
+64 bytes from 172.20.0.3: seq=0 ttl=64 time=0.238 ms
+64 bytes from 172.20.0.3: seq=1 ttl=64 time=0.069 ms
+
+--- udn-b ping statistics ---
+2 packets transmitted, 2 packets received, 0% packet loss
+```
+
+`/etc/resolv.conf` shows exactly why:
+
+```text
+$ docker exec udn-a cat /etc/resolv.conf
+nameserver 127.0.0.11
+options ndots:0
+
+$ docker exec dflt-a cat /etc/resolv.conf
+nameserver 192.168.65.7
+```
+
+A container on a user-defined network is pointed at **127.0.0.11**, Docker's embedded DNS server, which knows every container name on that network. A container on the default bridge is pointed straight at the host's upstream resolver, which has never heard of `dflt-b`. The old way to make names work on the default bridge was `--link`, which is deprecated. This is the practical reason to always create a network rather than relying on the default.
+
 ### Screenshots
 
 The screenshots were taken in a second run of the same commands, so container IDs differ from the text output above.
@@ -297,6 +357,69 @@ Browser after the edit:
 
 ![browser after](screenshots/dn-09-browser-after.png)
 
+### The `:ro` flag is enforced
+
+`rw=false` in the inspect output is a claim; this is the test. Same folder and the same `:ro` flag, run as a second container (`ro-demo`, published on 9091) so that `bind-nginx` above kept serving.
+
+```text
+$ docker run -d --name ro-demo -p 9091:80 -v "$(pwd)":/usr/share/nginx/html:ro nginx:alpine
+1715ea39511f4c5c5eb0c43ff1dc8485c1caab3452e5338d5885e8b39ba0456a
+```
+
+```text
+$ docker exec ro-demo sh -c 'echo tampered > /usr/share/nginx/html/index.html'
+sh: can't create /usr/share/nginx/html/index.html: Read-only file system
+exit status: 1
+
+$ docker exec ro-demo touch /usr/share/nginx/html/newfile.txt
+touch: /usr/share/nginx/html/newfile.txt: Read-only file system
+exit status: 1
+
+$ ls   # on the laptop - nothing was created
+index.html
+```
+
+The kernel refuses both the overwrite and the new file. Edits still flow **in** from the laptop, as shown above — `:ro` restricts the container, not me. For a web server that only ever needs to read its content, this is worth adding: a compromised Nginx cannot rewrite the files it serves.
+
+### Bind mount vs named volume
+
+A bind mount points at a path I choose. A named volume is storage Docker creates and manages, with no host path involved.
+
+```text
+$ docker volume create demo-vol
+demo-vol
+
+$ docker run --rm -v demo-vol:/data alpine sh -c 'echo "written by container 1" > /data/note.txt'
+(container 1 exited and was removed)
+
+$ docker run --rm -v demo-vol:/data alpine cat /data/note.txt   # a brand new container
+written by container 1
+```
+
+The first container wrote the file and was deleted (`--rm`). A completely separate container mounted the same volume and read it back — the data outlived the container that created it.
+
+```text
+$ docker volume inspect demo-vol -f 'Driver={{.Driver}} Mountpoint={{.Mountpoint}}'
+Driver=local Mountpoint=/var/lib/docker/volumes/demo-vol/_data
+
+$ ls /var/lib/docker/volumes/demo-vol/_data
+ls: /var/lib/docker/volumes/demo-vol/_data: No such file or directory
+```
+
+That `Mountpoint` does not exist on my Mac. On Docker Desktop the daemon runs in a Linux VM and the path is inside it — which is the point: the volume is Docker's to manage, not a folder I am meant to reach into.
+
+| | Bind mount | Named volume |
+|---|---|---|
+| Syntax | `-v /host/path:/container/path` | `-v volname:/container/path` |
+| Host path | I choose it, and it must exist | Docker manages it; on macOS it is inside the VM |
+| Portable across machines | No — the path is machine-specific | Yes — the name is all the other machine needs |
+| Edits from the host | Direct, with any editor | Only through a container |
+| Performance on macOS | Slower, crosses the VM boundary | Faster, native to the VM filesystem |
+| Survives `docker rm` | Yes, it is my folder | Yes, until `docker volume rm` |
+| Use for | Source code in development | Database data, uploads, anything stateful |
+
+The rule of thumb: bind mount what I edit, named volume what the app writes.
+
 ### What I understood
 
 - `-v "$(pwd)":/usr/share/nginx/html:ro` mounts my local folder over the Nginx web root. `:ro` makes it read-only inside the container (`rw=false`).
@@ -346,3 +469,13 @@ docker network ls --filter driver=overlay
 | `host` | One host | None | Maximum network performance, monitoring agents |
 | `overlay` | Many hosts | Yes, per network | Swarm services across a cluster |
 | `none` | – | Total | Containers that need no network |
+
+---
+
+## Clean up
+
+```bash
+docker rm -f frontend backend database bind-nginx ro-demo dflt-a dflt-b udn-a udn-b
+docker network rm frontend-net backend-net db-net demo-udn
+docker volume rm demo-vol
+```
